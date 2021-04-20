@@ -1,6 +1,6 @@
 [submodule "dependencies/zydis"]
 	path = dependencies/zydis
-	url = https://github.com/zyantific/zydis.git
+	url = https://github.com/zyantific/zydis
 [submodule "dependencies/elfio"]
 	path = dependencies/elfio
-	url = https://github.com/serge1/ELFIO.git
+	url = https://github.com/serge1/ELFIO
