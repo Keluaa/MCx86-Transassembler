@@ -1,0 +1,23 @@
+
+(maybe fork ELFIO and make the fork a dependency: https://stackoverflow.com/a/57940839/8662187)
+
+elfio patches:
+
+ - elfio.hpp:
+ 
+42-47: 
+#include "elf_types.hpp"
+#include "elfio_version.hpp"
+#include "elfio_utils.hpp"
+#include "elfio_header.hpp"
+#include "elfio_section.hpp"
+#include "elfio_segment.hpp"
+#include "elfio_strings.hpp"
+
+980-993:
+#include "elfio_symbols.hpp"
+#include "elfio_note.hpp"
+#include "elfio_relocation.hpp"
+#include "elfio_dynamic.hpp"
+#include "elfio_array.hpp"
+#include "elfio_modinfo.hpp"
