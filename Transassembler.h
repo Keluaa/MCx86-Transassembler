@@ -45,7 +45,7 @@ public:
     void process_jumps();
 
 
-    void convert_instructions(const IA32Mapping& mapping);
+    void convert_instructions(const IA32::Mapping& mapping);
 
 
     /**<

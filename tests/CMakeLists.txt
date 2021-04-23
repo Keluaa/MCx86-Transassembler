@@ -1,6 +1,7 @@
 
 add_executable(InstConv_Tests
         ../IA32Mapping.cpp
+        ../ComputerOpcodesInfo.cpp
         InstructionConvertionTests.cpp)
 
 include_directories(InstConv_Tests "../dependencies/elfio/elfio")

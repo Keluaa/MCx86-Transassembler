@@ -14,11 +14,13 @@ include_directories(ComputerTransassembler "dependencies/elfio/elfio")
 # ComputerTransassembler
 add_executable(ComputerTransassembler
         ComputerTransassembler.cpp
-        Transassembler.cpp
-        Transassembler.h
-        IA32Mapping.cpp
+        ComputerOpcodesInfo.h
+        ComputerOpcodesInfo.cpp
+        Instruction.h
         IA32Mapping.h
-        Instruction.h)
+        IA32Mapping.cpp
+        Transassembler.h
+        Transassembler.cpp)
 
 target_link_libraries(ComputerTransassembler PRIVATE "Zydis")
 

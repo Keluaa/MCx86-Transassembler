@@ -220,7 +220,7 @@ constexpr bool Transassembler::does_instruction_branches(const ZydisDecodedInstr
 }
 
 
-void Transassembler::convert_instructions(const IA32Mapping& mapping)
+void Transassembler::convert_instructions(const IA32::Mapping& mapping)
 {
     size_t i = 0;
 
@@ -239,7 +239,7 @@ void Transassembler::convert_instructions(const IA32Mapping& mapping)
             break;
         }
 
-        mapping.extract_instruction(IA32_inst, *inst);
+        mapping.convert_instruction(IA32_inst, *inst, runtime_address, segment_address);
 
         // Handle special cases
         switch (inst->opcode) {
@@ -252,6 +252,7 @@ void Transassembler::convert_instructions(const IA32Mapping& mapping)
         current_inst++;
 
         // TODO : write the buffer to file, clear buffer, repeat...
+        // TODO : edit addresses pointing to the code segment
 
         if (size <= offset) {
             break; // All instructions have been parsed

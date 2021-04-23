@@ -10,9 +10,8 @@ enum class OpType : uint8_t {
     REG,
     MEM,
     IMM,
-    M_M,
+    ABS_MEM,
     SREG,
-    MOFF,
     CREG
 };
 
@@ -28,22 +27,27 @@ struct Instruction {
 
     uint8_t opcode;
 
+    // Flags
     bool address_size_override : 1;
     bool operand_size_override : 1;
     bool address_byte_size_override : 1;
     bool operand_byte_size_override : 1;
 
     bool get_flags : 1;
+    // TODO : add special flags, like get/set Control Registers
 
+    // Operands
     OpType op1_type : 3;
     OpType op2_type : 3;
 
     uint8_t op1_register : 3;
     uint8_t op2_register : 3;
 
+    // Input
     bool read_op1 : 1;
     bool read_op2 : 1;
 
+    // Output
     bool write_ret1_to_op1 : 1;
     bool write_ret2_to_op2 : 1;
 
@@ -51,52 +55,22 @@ struct Instruction {
     bool scale_output_override : 1;
     uint8_t register_out : 3;
 
-    bool compute_address : 1;
+    // Addressing
+    // An effective address needs to be computed if any of reg_present, base_present or displacement_present is true
+    bool reg_present : 1;
+    uint8_t reg : 3;
+    uint8_t scale : 2;
+    bool base_present : 1;
+    uint8_t base_reg : 3;
+    uint8_t displacement_present : 1; // The displacement is stored in the address_value field
 
-    uint8_t : 0; // alignment (5 bits of padding)
+    uint8_t : 0; // alignment (2 bits of padding)
 
-    // Optional mod r/m and SIB bytes
-    union {
-        uint16_t raw_address_specifier;
-        struct {
-            // mod r/m byte
-            uint8_t mod:2;
-            uint8_t reg:3;
-            uint8_t rm:3;
-
-            // SIB byte
-            uint8_t scale:2;
-            uint8_t index:3;
-            uint8_t base:3;
-        } mod_rm_sib;
-    };
-
-    // both of those values can be used as general purpose values in spacial instructions (bound, call...)
+    // both of those values can be used as general purpose values in special instructions (bound, call...)
     uint32_t address_value;
     uint32_t immediate_value;
 
-
-    constexpr bool operator==(const Instruction& other) const
-    {
-        // We cannot use the default implementation because of the union member.
-
-        if (this == &other) {
-            return true;
-        }
-
-        // To avoid checking for each bit field and to handle the union we just parse through their bytes.
-        // Restrict is used here for pedantry (and optimisations).
-        auto* __restrict__ this_bytes = (uint8_t* __restrict__) this;
-        auto* __restrict__ other_bytes = (uint8_t* __restrict__) &other;
-
-        for (size_t i = 0; i < sizeof(Instruction); i++, this_bytes++, other_bytes++) {
-            if (*this_bytes != *other_bytes) {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    constexpr bool operator==(const Instruction& other) const = default;
 };
 
 

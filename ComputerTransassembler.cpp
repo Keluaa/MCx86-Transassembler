@@ -8,30 +8,49 @@
 
 static ZydisFormatter formatter;
 
-static IA32Mapping mapping;
+static IA32::Mapping mapping;
 
-// voir https://refspecs.linuxfoundation.org/elf/elf.pdf
-
-
-// Linker Scripts:
-// https://ftp.gnu.org/old-gnu/Manuals/ld-2.9.1/html_chapter/ld_3.html
-// https://wiki.osdev.org/Linker_Scripts
-
-// objcopy pour créer des raw binary file depuis des elf: https://stackoverflow.com/a/3615574/8662187
+static ComputerOpcodesInfo opcodes_info;
 
 
-int load_mapping(const std::string& mapping_file_name)
+bool load_opcodes_mapping(const std::string& opcodes_mapping_file)
+{
+    std::fstream opcodes_file;
+    opcodes_file.open(opcodes_mapping_file, std::ios::in);
+    if (!opcodes_file.is_open()) {
+        std::cerr << "Cannot open the opcodes file: " << opcodes_mapping_file << std::endl;
+        return true;
+    }
+    else if (opcodes_info.load_map(opcodes_file)) {
+        std::cerr << "Parsing error for the opcodes file: " << opcodes_mapping_file << std::endl;
+        return true;
+    }
+    opcodes_file.close();
+
+    return false;
+}
+
+
+bool load_mapping(const std::string& mapping_file_name)
 {
     std::fstream mapping_file;
     mapping_file.open(mapping_file_name, std::ios::in);
-    if (mapping_file.bad()) {
-        std::cerr << "Could not open the mapping file: " << mapping_file_name << std::endl;
-        return 1;
+    if (!mapping_file.is_open()) {
+        std::cerr << "Cannot open the mapping file: " << mapping_file_name << std::endl;
+        return true;
     }
 
-    mapping.load_instruction_mapping(mapping_file);
+    try {
+        mapping.load_instructions_extract_info(mapping_file, opcodes_info);
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error while loading the mapping file: \n" << e.what() << "\n";
+        return false;
+    }
 
-    return 0;
+    mapping_file.close();
+
+    return false;
 }
 
 
@@ -81,6 +100,11 @@ int main()
 {
     const std::string elf_file = "./ProgramCore/Program_core.exe";
     const std::string mapping_file_name = "./IA32_instructions_mapping.csv";
+    const std::string opcodes_mapping_file_name = "./computer_instructions.csv";
+
+    if (!load_opcodes_mapping(opcodes_mapping_file_name)) {
+        return 1;
+    }
 
     if (!load_mapping(mapping_file_name)) {
         return 1;
