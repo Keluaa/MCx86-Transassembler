@@ -16,6 +16,18 @@ enum class OpType : uint8_t {
 };
 
 
+enum class Register : uint8_t {
+    EAX = 0, // AL, AX, EAX
+    ECX = 1, // CL, CX, ECX
+    EDX = 2, // DL, DX, EDX
+    EBX = 3, // BL, BX, EBX
+    ESP = 4, // AH, SP, ESP
+    EBP = 5, // CH, BP, EBP
+    ESI = 6, // DH, SI, ESI
+    EDI = 7, // BH, DI, EDI
+};
+
+
 /**
  * Instruction for our computer.
  *
@@ -40,8 +52,8 @@ struct Instruction {
     OpType op1_type : 3;
     OpType op2_type : 3;
 
-    uint8_t op1_register : 3;
-    uint8_t op2_register : 3;
+    Register op1_register : 3;
+    Register op2_register : 3;
 
     // Input
     bool read_op1 : 1;

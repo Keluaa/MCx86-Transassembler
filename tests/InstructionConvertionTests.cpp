@@ -135,6 +135,27 @@ void test_instruction_conversion(const uint8_t* encoded_IA32_inst, size_t encode
  */
 
 
+TEST_CASE("AAA")
+{
+    init();
+
+    const uint8_t data[] = {
+            /* aaa */ 0x37
+    };
+
+    Instruction expected{
+        .opcode = opcodes_info.get_opcode("AAA"),
+        .get_flags = true,
+        .op1_type = OpType::REG,
+        .op1_register = Register::EAX,
+        .read_op1 = true,
+        .write_ret1_to_op1 = true,
+    };
+
+    test_instruction_conversion(data, sizeof(data), expected);
+}
+
+
 TEST_CASE("ADD")
 {
     init();
@@ -148,7 +169,7 @@ TEST_CASE("ADD")
         .get_flags = true,
         .op1_type = OpType::REG,
         .op2_type = OpType::IMM,
-        .op1_register = 0, // EAX
+        .op1_register = Register::EAX,
         .read_op1 = true,
         .read_op2 = true,
         .write_ret1_to_op1 = true,
@@ -171,7 +192,7 @@ TEST_CASE("MOV")
         .opcode = opcodes_info.get_opcode("MOV"),
         .op1_type = OpType::REG,
         .op2_type = OpType::IMM,
-        .op1_register = 0, // EAX
+        .op1_register = Register::EAX,
         .read_op2 = true,
         .write_ret1_to_op1 = true,
         .immediate_value = 42
@@ -179,4 +200,3 @@ TEST_CASE("MOV")
 
     test_instruction_conversion(data, sizeof(data), res);
 }
-

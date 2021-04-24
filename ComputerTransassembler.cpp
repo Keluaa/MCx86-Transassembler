@@ -21,9 +21,16 @@ bool load_opcodes_mapping(const std::string& opcodes_mapping_file)
         std::cerr << "Cannot open the opcodes file: " << opcodes_mapping_file << std::endl;
         return true;
     }
-    else if (opcodes_info.load_map(opcodes_file)) {
-        std::cerr << "Parsing error for the opcodes file: " << opcodes_mapping_file << std::endl;
-        return true;
+    else {
+        try {
+            if (opcodes_info.load_map(opcodes_file)) {
+                std::cerr << "Parsing error for the opcodes file: " << opcodes_mapping_file << std::endl;
+                return true;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Parsing error for the opcodes file: " << opcodes_mapping_file << "\n" << e.what() << std::endl;
+            return true;
+        }
     }
     opcodes_file.close();
 
@@ -41,7 +48,10 @@ bool load_mapping(const std::string& mapping_file_name)
     }
 
     try {
-        mapping.load_instructions_extract_info(mapping_file, opcodes_info);
+        if (mapping.load_instructions_extract_info(mapping_file, opcodes_info)) {
+            std::cerr << "Parsing error for the mapping file: " << mapping_file_name << std::endl;
+            return true;
+        }
     }
     catch (const std::exception& e) {
         std::cerr << "Error while loading the mapping file: \n" << e.what() << "\n";

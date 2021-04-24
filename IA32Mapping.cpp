@@ -52,27 +52,45 @@ int scan_optional_format(const std::string& str, const char* format, const std::
                 return -1;
 
             case 'b': // boolean
-                status = std::from_chars(status.ptr, str_end, value);
-                if (status.ec == std::errc()) {
-                    // No parsing error
-                    *std::any_cast<bool*>(args.at(args_index)) = (bool) value;
+                if (*status.ptr == *format) {
+                    // The next character in the string is the character after %b -> skip this argument
+                    args_index++;
+                    continue;
                 }
+                status = std::from_chars(status.ptr, str_end, value);
+                if (status.ec != std::errc()) {
+                    // Conversion error
+                    return -1;
+                }
+                *std::any_cast<bool*>(args.at(args_index)) = (bool) value;
                 break;
 
             case 'd': // decimal number
-                status = std::from_chars(status.ptr, str_end, value);
-                if (status.ec == std::errc()) {
-                    // No parsing error
-                    *std::any_cast<uint32_t*>(args.at(args_index)) = value;
+                if (*status.ptr == *format) {
+                    // The next character in the string is the character after %d -> skip this argument
+                    args_index++;
+                    continue;
                 }
+                status = std::from_chars(status.ptr, str_end, value);
+                if (status.ec != std::errc()) {
+                    // Conversion error
+                    return -1;
+                }
+                *std::any_cast<uint32_t*>(args.at(args_index)) = value;
                 break;
 
             case 'x': // hexadecimal number
-                status = std::from_chars(status.ptr, str_end, value, 16);
-                if (status.ec == std::errc()) {
-                    // No parsing error
-                    *std::any_cast<uint32_t*>(args.at(args_index)) = value;
+                if (*status.ptr == *format) {
+                    // The next character in the string is the character after %x -> skip this argument
+                    args_index++;
+                    continue;
                 }
+                status = std::from_chars(status.ptr, str_end, value, 16);
+                if (status.ec != std::errc()) {
+                    // Conversion error
+                    return -1;
+                }
+                *std::any_cast<uint32_t*>(args.at(args_index)) = value;
                 break;
 
             case 's': // string
@@ -155,6 +173,7 @@ static constexpr IA32::Operand operand_descriptor_from_str(const char* desc)
 
     // Explicit register operands
     case chars_to_int("AL"):       return IA32::Operand::AL;
+    case chars_to_int("AX"):
     case chars_to_int("EAX"):      return IA32::Operand::EAX;   // AX or EAX depending on the operand size
 
     // Implicit register operands, encoded into the opcode
@@ -311,7 +330,7 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
     uint32_t tmp_opcode;
     uint32_t extension;
 
-    bool opcode_in_mod_rm, repeat_for_all_registers;
+    bool repeat_for_all_registers;
     bool tmp_keep_overrides, tmp_address_override, tmp_operand_override;
     bool tmp_opt_immediate, tmp_read_op1, tmp_read_op2, tmp_write_r1_op1, tmp_write_r2_op2;
     bool tmp_write_r1_reg, tmp_r1_reg_scale;
@@ -319,7 +338,6 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
     const std::array format_values{
             std::make_any<uint32_t*>(&tmp_opcode),
             std::make_any<uint32_t*>(&extension),
-            std::make_any<bool*>(&opcode_in_mod_rm),
             std::make_any<bool*>(&repeat_for_all_registers),
             std::make_any<std::string*>(&tmp_equiv_mnemonic),
             std::make_any<bool*>(&tmp_keep_overrides),
@@ -337,8 +355,10 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
             std::make_any<std::string*>(&tmp_r1_reg),
     };
 
+    int line_nb = 0;
+
     while (mapping_file.good()) {
-        mapping_file.get(inst.mnemonic, 5, ',');
+        mapping_file.get(inst.mnemonic, 6, ',');
         mapping_file.ignore(1); // skip the comma
 
         if (mapping_file.eof()) {
@@ -350,7 +370,6 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
 
         // Set all optional values to their default value
         extension = 0;
-        opcode_in_mod_rm = false;
         repeat_for_all_registers = false;
         tmp_keep_overrides = true;
         tmp_address_override = false;
@@ -367,10 +386,10 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
         tmp_r1_reg.clear();
 
         // Scan the line
-        const char format[] = "%x,%d,%b,%b,%s,%b,%b,%b,%s,%s,%b,%b,%b,%b,%b,%b,%b,%s\r";
+        const char format[] = "%x,%d,%b,%s,%b,%b,%b,%s,%s,%b,%b,%b,%b,%b,%b,%b,%s\r";
         if (scan_optional_format(line, format, format_values)) {
             // Not all of the line has been parsed
-            return true;
+            throw LoadingException("Invalid characters at line %d", line_nb);
         }
 
         // The two non-optional values
@@ -378,10 +397,8 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
         strcpy(inst.equiv_mnemonic, tmp_equiv_mnemonic.c_str());
 
         // Handle opcode extensions
-        if (opcode_in_mod_rm) {
-            opcodes_with_reg_extension.insert(inst.opcode);
-        }
         if (extension != 0) {
+            opcodes_with_reg_extension.insert(inst.opcode);
             inst.opcode += extension << 12;
         }
 
@@ -400,7 +417,7 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
         inst.write_ret_1_register_scale = tmp_r1_reg_scale;
         inst.write_ret_1_out_register = register_index_from_name(tmp_r1_reg.c_str());
 
-        inst.has_mod_byte = is_mod_rm_byte_present(opcode_in_mod_rm, inst.operand_1, inst.operand_2);
+        inst.has_mod_byte = is_mod_rm_byte_present(extension != 0, inst.operand_1, inst.operand_2);
 
         ComputerOpcodesInfo::OpcodeInfo opcode_info = opcodes_info.get_infos(inst.equiv_mnemonic);
         inst.equiv_opcode = opcode_info.opcode;
@@ -411,12 +428,23 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
             for (int i = 0; i < 8; i++) {
                 IA32::Inst copy = inst;
                 copy.opcode += i;
+
+                if (instructions_extraction_info.contains(copy.opcode)) {
+                    throw LoadingException("Duplicate opcode: 0x%x", copy.opcode);
+                }
+
                 instructions_extraction_info.insert(std::pair<uint16_t, const IA32::Inst>(copy.opcode, copy));
             }
         }
         else {
+            if (instructions_extraction_info.contains(inst.opcode)) {
+                throw LoadingException("Duplicate opcode: 0x%x", inst.opcode);
+            }
+
             instructions_extraction_info.insert(std::pair<uint16_t, const IA32::Inst>(inst.opcode, inst));
         }
+
+        line_nb++;
     }
 
     return false;
@@ -442,6 +470,8 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
     if (!instructions_extraction_info.contains(IA32inst.opcode)) {
         throw ConversionException(virtual_address, "Unknown opcode: %d (%s)\n", IA32inst.opcode, ZydisMnemonicGetString(IA32inst.mnemonic));
     }
+
+    // TODO : REP prefix, checked with IA32inst.attributes & ZYDIS_ATTRIB_HAS_REP ou ZYDIS_ATTRIB_HAS_REPE
 
     uint16_t opcode = IA32inst.opcode;
     opcode |= IA32inst.opcode_map == ZYDIS_OPCODE_MAP_0F ? 0x0F00 : 0x0000;
@@ -543,21 +573,21 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
         inst.operand_byte_size_override = true;
     case Operand::EAX:
         inst.op1_type = OpType::REG;
-        inst.op1_register = 0;
+        inst.op1_register = Register::EAX;
         break;
 
     case Operand::reg8:
         inst.operand_byte_size_override = true;
     case Operand::reg:
         inst.op1_type = OpType::REG;
-        inst.op1_register = inst.opcode & 0b111; // The register index is encoded in the first 3 bits of the opcode
+        inst.op1_register = Register(inst.opcode & 0b111); // The register index is encoded in the first 3 bits of the opcode
         break;
 
     case Operand::r8:
         inst.operand_byte_size_override = true;
     case Operand::r:
         inst.op1_type = OpType::REG;
-        inst.op1_register = ZydisRegisterGetId(IA32inst.operands[0].reg.value);
+        inst.op1_register = Register(ZydisRegisterGetId(IA32inst.operands[0].reg.value));
         break;
 
     case Operand::rm8:
@@ -565,7 +595,7 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
     case Operand::rm:
         if (rm_is_register_operand) {
             inst.op1_type = OpType::REG;
-            inst.op1_register = register_index;
+            inst.op1_register = Register(register_index);
         }
         else {
             // Memory operand
@@ -634,7 +664,7 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
     case Operand::Sreg:
         // Segment register index
         inst.op1_type = OpType::SREG;
-        inst.op1_register = ZydisRegisterGetId(IA32inst.operands[0].reg.value);
+        inst.op1_register = Register(ZydisRegisterGetId(IA32inst.operands[0].reg.value));
         break;
     }
 
@@ -650,7 +680,7 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
         }
     case Operand::EAX:
         inst.op2_type = OpType::REG;
-        inst.op2_register = 0;
+        inst.op2_register = Register::EAX;
         break;
 
     case Operand::reg8:
@@ -659,7 +689,7 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
         }
     case Operand::reg:
         inst.op2_type = OpType::REG;
-        inst.op2_register = inst.opcode & 0b111; // The register index is encoded in the first 3 bits of the opcode
+        inst.op2_register = Register(inst.opcode & 0b111); // The register index is encoded in the first 3 bits of the opcode
         break;
 
     case Operand::r8:
@@ -668,7 +698,7 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
         }
     case Operand::r:
         inst.op2_type = OpType::REG;
-        inst.op2_register = ZydisRegisterGetId(IA32inst.operands[1].reg.value);
+        inst.op2_register = Register(ZydisRegisterGetId(IA32inst.operands[1].reg.value));
         break;
 
     case Operand::rm8:
@@ -678,7 +708,7 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
     case Operand::rm:
         if (rm_is_register_operand) {
             inst.op2_type = OpType::REG;
-            inst.op2_register = register_index;
+            inst.op2_register = Register(register_index);
         }
         else {
             // Memory operand
@@ -764,7 +794,7 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
     case Operand::Sreg:
         // Segment register index
         inst.op2_type = OpType::SREG;
-        inst.op2_register = ZydisRegisterGetId(IA32inst.operands[1].reg.value);
+        inst.op2_register = Register(ZydisRegisterGetId(IA32inst.operands[1].reg.value));
         break;
     }
 

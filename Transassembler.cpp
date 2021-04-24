@@ -251,6 +251,7 @@ void Transassembler::convert_instructions(const IA32::Mapping& mapping)
         runtime_address += IA32_inst.length;
         current_inst++;
 
+        // TODO : transform some instructions, such as 'XCHG EAX, EAX' to 'NOP'
         // TODO : write the buffer to file, clear buffer, repeat...
         // TODO : edit addresses pointing to the code segment
 
