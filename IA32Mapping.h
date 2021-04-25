@@ -33,7 +33,28 @@ enum class IA32::Operand : uint8_t
 
     /// Explicit register operands
     AL,
-    EAX, /// AX or EAX registers depending on the operand size
+    AH,
+    EAX,
+
+    CL,
+    ECX,
+
+    DL,
+    EDX,
+
+    /// Scaled register operands, they only specify an index, the size will be determined by the operand size
+    A,   /// AL, AX, EAX
+    C,   /// CL, CX, ECX
+    D,   /// DL, DX, EDX
+    B,   /// BL, BX, EBX
+
+    /// Explicit segment registers operands
+    CS,
+    SS,
+    DS,
+    ES,
+    FS,
+    GS,
 
     /// Register operands, encoded into the opcode of the instruction (+r[b,w,d] in the manual)
     reg, /// 32 or 16 bits depending on the operand size
@@ -42,19 +63,26 @@ enum class IA32::Operand : uint8_t
     /// Register operands (implies a mod r/m byte is present)
     r,   /// 32 or 16 bits depending on the operand size
     r8,
+    r16,
+    r32,
 
     /// Register or memory operands (implies a mod r/m byte is present)
     rm,  /// 32 or 16 bits depending on the operand size
     rm8,
+    rm16,
 
     /// Memory operands (implies a mod r/m byte is present)
     m,   /// 32 or 16 bits depending on the operand size
     m8,
 
     /// Immediate operands
+    imm,
     imm8,
     imm16,
     imm32,
+
+    /// Constant immediate operand
+    cst,
 
     /// Relative address operands
     rel,      /// 8, 16 or 32 bits depending on the operand size
@@ -77,6 +105,9 @@ enum class IA32::Operand : uint8_t
 
     /// Segment register operand
     Sreg,
+
+    /// Control register operand
+    Creg,
 };
 
 
@@ -95,14 +126,13 @@ struct IA32::Inst
     // Size override flags
 
     bool keep_overrides : 1;              /// Keep the size overrides and ignore the two values below
-    bool address_size_override : 1;       /// Force 16-bit addresses
-    bool operand_size_override : 1;       /// Force 16-bit operands
 
     // Operands. All instructions we consider have at most 2 operands (and one optional third immediate operand)
 
-    IA32::Operand operand_1 : 6;          /// Type of the first operand
-    IA32::Operand operand_2 : 6;          /// Type of the second operand
+    Operand operand_1 : 6;                /// Type of the first operand
+    Operand operand_2 : 6;                /// Type of the second operand
 
+    Operand operand_3_imm : 6;            /// For 3 operands instructions with an immediate as the third operand
     bool has_immediate_operand : 1;       /// For 3 operands instructions with an immediate as the third operand
 
     bool read_operand_1 : 1;              /// Do we read the value of the first operand
@@ -113,14 +143,19 @@ struct IA32::Inst
     bool write_ret_1_to_op_1 : 1;         /// Write the first return value to the first operand
     bool write_ret_2_to_op_2 : 1;         /// Write the second return value to the second operand
 
-    bool write_ret_1_register : 1;        /// Write the first return value to a specific register
-    bool write_ret_1_register_scale : 1;  /// Use the size overrides for the size of the return value
-    uint8_t write_ret_1_out_register : 3; /// Output register index of the return value
+    bool write_ret_2_register : 1;        /// Write the second return value to the specific register
+    bool write_ret_register_scale : 1;    /// Use the size overrides for the size of the specific register
+    Operand write_ret_out_register : 6;   /// Specific register index in the general purpose registers
 
     // Other flags
 
     bool has_mod_byte : 1;                /// Extract the Mod r/m byte (and the SIB byte if present)
     bool get_flags : 1;                   /// The instruction needs the CPU flags (to either read and/or write)
+    bool get_CR0 : 1;                     /// The instruction needs the CR0 flags (only read)
+
+    uint8_t : 0; // alignment
+
+    uint8_t immediate_value;             /// Constant immediate value for the instruction
 };
 
 
@@ -128,6 +163,17 @@ class IA32::Mapping
 {
 public:
     bool load_instructions_extract_info(std::fstream& mapping_file, const ComputerOpcodesInfo& opcodes_info);
+
+    static constexpr Register scale_register(uint8_t index,
+                                             bool operand_size_override, bool operand_byte_size_override,
+                                             const uint32_t& virtual_address);
+
+    static void convert_operand(const ZydisDecodedInstruction& IA32inst, const IA32::Inst& extract_data, Instruction& inst,
+                                uint32_t virtual_address, uint32_t segment_base_address, uint8_t op_index,
+                                const Operand& inst_operand, Instruction::Operand& op,
+                                bool rm_is_register_operand, uint8_t rm_index);
+
+    static void post_conversion(const ZydisDecodedInstruction& IA32inst, Instruction& inst);
 
     void convert_instruction(const ZydisDecodedInstruction& IA32inst, Instruction& inst,
                              uint32_t virtual_address, uint32_t segment_base_address) const;

@@ -52,26 +52,24 @@ void find_instructions_differences(const Instruction& generated, const Instructi
 {
     CHECK_EQ(generated.opcode, expected.opcode);
 
-    CHECK_EQ(generated.address_size_override, expected.address_size_override);
     CHECK_EQ(generated.operand_size_override, expected.operand_size_override);
-    CHECK_EQ(generated.address_byte_size_override, expected.address_byte_size_override);
     CHECK_EQ(generated.operand_byte_size_override, expected.operand_byte_size_override);
 
     CHECK_EQ(generated.get_flags, expected.get_flags);
+    CHECK_EQ(generated.get_CR0, expected.get_CR0);
 
-    CHECK_EQ(generated.op1_type, expected.op1_type);
-    CHECK_EQ(generated.op2_type, expected.op2_type);
+    CHECK_EQ(generated.op1.type, expected.op1.type);
+    CHECK_EQ(generated.op1.reg, expected.op1.reg);
+    CHECK_EQ(generated.op1.read, expected.op1.read);
 
-    CHECK_EQ(generated.op1_register, expected.op1_register);
-    CHECK_EQ(generated.op2_register, expected.op2_register);
-
-    CHECK_EQ(generated.read_op1, expected.read_op1);
-    CHECK_EQ(generated.read_op2, expected.read_op2);
+    CHECK_EQ(generated.op2.type, expected.op2.type);
+    CHECK_EQ(generated.op2.reg, expected.op2.reg);
+    CHECK_EQ(generated.op2.read, expected.op2.read);
 
     CHECK_EQ(generated.write_ret1_to_op1, expected.write_ret1_to_op1);
     CHECK_EQ(generated.write_ret2_to_op2, expected.write_ret2_to_op2);
 
-    CHECK_EQ(generated.write_ret1_to_register, expected.write_ret1_to_register);
+    CHECK_EQ(generated.write_ret2_to_register, expected.write_ret2_to_register);
     CHECK_EQ(generated.scale_output_override, expected.scale_output_override);
     CHECK_EQ(generated.register_out, expected.register_out);
 
@@ -145,10 +143,8 @@ TEST_CASE("AAA")
 
     Instruction expected{
         .opcode = opcodes_info.get_opcode("AAA"),
+        .op1 = { OpType::REG, Register::EAX, true },
         .get_flags = true,
-        .op1_type = OpType::REG,
-        .op1_register = Register::EAX,
-        .read_op1 = true,
         .write_ret1_to_op1 = true,
     };
 
@@ -166,12 +162,9 @@ TEST_CASE("ADD")
 
     Instruction expected{
         .opcode = opcodes_info.get_opcode("ADD"),
+        .op1 = { OpType::REG, Register::EAX, true },
+        .op2 = { .type = OpType::IMM, .read = true },
         .get_flags = true,
-        .op1_type = OpType::REG,
-        .op2_type = OpType::IMM,
-        .op1_register = Register::EAX,
-        .read_op1 = true,
-        .read_op2 = true,
         .write_ret1_to_op1 = true,
         .immediate_value = 69
     };
@@ -190,10 +183,8 @@ TEST_CASE("MOV")
 
     Instruction res{
         .opcode = opcodes_info.get_opcode("MOV"),
-        .op1_type = OpType::REG,
-        .op2_type = OpType::IMM,
-        .op1_register = Register::EAX,
-        .read_op2 = true,
+        .op1 = { OpType::REG, Register::EAX, false },
+        .op2 = { .type = OpType::IMM, .read = true },
         .write_ret1_to_op1 = true,
         .immediate_value = 42
     };
