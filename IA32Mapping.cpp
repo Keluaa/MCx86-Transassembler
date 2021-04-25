@@ -763,7 +763,7 @@ void IA32::Mapping::convert_operand(const ZydisDecodedInstruction& IA32inst, con
         if (inst.address_value != 0) {
             throw ConversionException(virtual_address, "Address value already used: 0x%x", inst.address_value);
         }
-        op.type = OpType::ABS_MEM;
+        op.type = OpType::IMM_MEM;
         // Signed offset relative to the end of the instruction
         inst.address_value = virtual_address + IA32inst.length + IA32inst.operands[op_index].imm.value.s;
         break;
@@ -772,7 +772,7 @@ void IA32::Mapping::convert_operand(const ZydisDecodedInstruction& IA32inst, con
         if (inst.address_value != 0) {
             throw ConversionException(virtual_address, "Address value already used: 0x%x", inst.address_value);
         }
-        op.type = OpType::ABS_MEM;
+        op.type = OpType::IMM_MEM;
         // Unsigned offset relative to the current segment
         inst.address_value = segment_base_address + IA32inst.operands[op_index].imm.value.u;
         break;

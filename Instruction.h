@@ -9,7 +9,7 @@ enum class OpType : uint8_t {
     REG,
     MEM,
     IMM,
-    ABS_MEM,
+    IMM_MEM,
 };
 
 
