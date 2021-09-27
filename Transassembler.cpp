@@ -13,10 +13,12 @@ Transassembler::Transassembler(const uint8_t* data, const size_t size, const uin
 }
 
 
-void Transassembler::process_jumps()
+void Transassembler::process_code_segment_references()
 {
     // Maps the instruction targets to their jumping instructions.
     std::unordered_multimap<ZyanUSize, uint32_t> unprocessed_jump_targets;
+
+    // TODO : handle references to memory in the code, such as in the Mod r/m + SIB bytes and moffs operands (with the CS prefix)
 
     ZyanU64 runtime_address = segment_address;
     ZyanUSize offset = 0;

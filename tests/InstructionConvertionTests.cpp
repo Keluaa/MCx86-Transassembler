@@ -1,4 +1,5 @@
 
+#include <forward_list>
 #include "../IA32Mapping.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
@@ -43,6 +44,8 @@ void init()
 
     // x86 with 32-bit addressing
     ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LEGACY_32, ZYDIS_ADDRESS_WIDTH_32);
+
+    INFO("Mappings loaded.");
 
     initialized = true;
 }
@@ -126,68 +129,144 @@ void test_instruction_conversion(const uint8_t* encoded_IA32_inst, size_t encode
  *        .text
  *    test:
  *        .intel_syntax noprefix
- *        <instruction in AT&T syntax>
+ *        <instruction in intel syntax>
  *
  *  - compile with gcc:            gcc -m32 -c <assembly_file>
  *  - then decompile with objdump: objdump -M intel -d <object file>
+ *
+ *
+ * Or using the bash script: ./encode_inst.sh '<instruction in intel syntax>'
+ * All of the above is handled properly by the script.
  */
 
 
-TEST_CASE("AAA")
+struct TestInfo {
+    const char* test_name;
+    std::array<uint8_t, 8> data;
+    Instruction expected;
+};
+
+
+static const std::array<TestInfo, 10> instructions_test_cases{
+    TestInfo{
+        "AAA", { /* AAA */ 0x37 }, {
+            .opcode = 0,
+            .op1 = { OpType::REG, Register::EAX, true },
+            .get_flags = true,
+            .write_ret1_to_op1 = true,
+        },
+    }, TestInfo{
+        "ADD", { /* ADD eax, 69 */ 0x83, 0xC0, 0x45 }, {
+           .opcode = 5,
+           .op1 = { OpType::REG, Register::EAX, true },
+           .op2 = { .type = OpType::IMM, .read = true },
+           .get_flags = true,
+           .write_ret1_to_op1 = true,
+           .immediate_value = 69
+       },
+    }, TestInfo{
+        "ADD_8bits", { /* ADD AL, 42 */ 0x04, 0x2A }, {
+            .opcode = 5,
+            .op1 = { OpType::REG, Register::AL, true },
+            .op2 = { .type = OpType::IMM, .read = true },
+            .operand_byte_size_override = true,
+            .get_flags = true,
+            .write_ret1_to_op1 = true,
+            .immediate_value = 42
+        }
+    }, TestInfo{
+        "ADD_16bits", { /* ADD AX, 0xFF01 */ 0x66, 0x05, 0x01, 0xFF }, {
+            .opcode = 5,
+            .op1 = { OpType::REG, Register::AX, true },
+            .op2 = { .type = OpType::IMM, .read = true },
+            .operand_size_override = true,
+            .get_flags = true,
+            .write_ret1_to_op1 = true,
+            .immediate_value = 0xFF01
+        },
+    }, TestInfo{
+        "ADD_r/m8_imm8", { /* ADD BYTE PTR [eax], 42 */ 0x80, 0x00, 0x2A }, {
+            .opcode = 5,
+            .op1 = { OpType::MEM, Register::EAX, true },
+            .op2 = { .type = OpType::IMM, .read = true },
+            .operand_byte_size_override = true,
+            .get_flags = true,
+            .write_ret1_to_op1 = true,
+            .reg_present = true,
+            .reg = uint8_t(Register::EAX),
+            .immediate_value = 42
+        },
+    }, TestInfo{
+        "ADD_r/m_imm", { /* ADD DWORD PTR [eax], 4242 */ 0x81, 0x00, 0x92, 0x10, 0x00, 0x00 }, {
+            .opcode = 5,
+            .op1 = { OpType::MEM, Register::EAX, true },
+            .op2 = { .type = OpType::IMM, .read = true },
+            .get_flags = true,
+            .write_ret1_to_op1 = true,
+            .reg_present = true,
+            .reg = uint8_t(Register::EAX),
+            .immediate_value = 4242
+        },
+    }, TestInfo{
+        "MOV", { /* MOV eax, 42 */ 0xB8, 0x2A, 0x00, 0x00, 0x00 }, {
+            .opcode = 32,
+            .op1 = { OpType::REG, Register::EAX, false },
+            .op2 = { .type = OpType::IMM, .read = true },
+            .write_ret1_to_op1 = true,
+            .immediate_value = 42
+        }
+    }, TestInfo{
+        "MOV_moffs", { /* MOV cs:label, eax */ 0x2E, 0xA3, 0x07, 0x00, 0x00, 0x00 }, {
+            .opcode = 32,
+            .op1 = { .type = OpType::IMM_MEM, .read = false },
+            .op2 = { OpType::REG, Register::EAX, true },
+            .write_ret1_to_op1 = true,
+            .address_value = 0x80000 | 0x07
+        }
+    }, TestInfo{
+        "MOV_r/m_sib", { /* MOV BYTE PTR [eax+ecx*8], 42 */ 0xC6, 0x04, 0xC8, 0x2A }, {
+            .opcode = 32,
+            .op1 = { .type = OpType::MEM, .read = false },
+            .op2 = { .type = OpType::IMM, .read = true },
+            .operand_byte_size_override = true,
+            .write_ret1_to_op1 = true,
+            .reg_present = true,
+            .reg = uint8_t(Register::ECX),
+            .scale = 0b11,
+            .base_present = true,
+            .base_reg = uint8_t(Register::EAX),
+            .displacement_present = false,
+            .immediate_value = 42
+        }
+    },
+
+    /* TODO : this instruction should cause problems: a jump using a lookup table to know where to jump.
+     *  This seems to be the same shape every time, so there is maybe something that can be done to fix this.
+     *  There shouldn't be anything to change in the instruction, just only the values pointed to, but how many?
+     */
+    TestInfo{
+        "JMP_r/m_sib", { /* JMP DWORD PTR [eax*4+0x8000042] */ 0xFF, 0x24, 0x85, 0x42, 0x00, 0x00, 0x08 }, {
+            .opcode = 196,
+            .op1 = { .type = OpType::MEM, .read = true },
+            .op2 = { .type = OpType::IMM_MEM, .read = true },
+            .reg_present = true,
+            .reg = uint8_t(Register::EAX),
+            .scale = 0b10,
+            .base_present = false,
+            .displacement_present = true,
+            .address_value = 0x8000000 | 0x42
+        }
+    },
+};
+
+
+TEST_CASE("x86 Instructions")
 {
     init();
 
-    const uint8_t data[] = {
-            /* aaa */ 0x37
-    };
-
-    Instruction expected{
-        .opcode = opcodes_info.get_opcode("AAA"),
-        .op1 = { OpType::REG, Register::EAX, true },
-        .get_flags = true,
-        .write_ret1_to_op1 = true,
-    };
-
-    test_instruction_conversion(data, sizeof(data), expected);
-}
-
-
-TEST_CASE("ADD")
-{
-    init();
-
-    const uint8_t data[] = {
-            /* add eax, 69 */ 0x83, 0xC0, 0x45
-    };
-
-    Instruction expected{
-        .opcode = opcodes_info.get_opcode("ADD"),
-        .op1 = { OpType::REG, Register::EAX, true },
-        .op2 = { .type = OpType::IMM, .read = true },
-        .get_flags = true,
-        .write_ret1_to_op1 = true,
-        .immediate_value = 69
-    };
-
-    test_instruction_conversion(data, sizeof(data), expected);
-}
-
-
-TEST_CASE("MOV")
-{
-    init();
-
-    const uint8_t data[] = {
-            /* mov eax, 42 */ 0xB8, 0x2A, 0x00, 0x00, 0x00,
-    };
-
-    Instruction res{
-        .opcode = opcodes_info.get_opcode("MOV"),
-        .op1 = { OpType::REG, Register::EAX, false },
-        .op2 = { .type = OpType::IMM, .read = true },
-        .write_ret1_to_op1 = true,
-        .immediate_value = 42
-    };
-
-    test_instruction_conversion(data, sizeof(data), res);
+    for (const auto& test : instructions_test_cases) {
+        SUBCASE(test.test_name) {
+            test_instruction_conversion(test.data.data(), test.data.size(), test.expected);
+        }
+    }
 }

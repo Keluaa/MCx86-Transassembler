@@ -773,8 +773,13 @@ void IA32::Mapping::convert_operand(const ZydisDecodedInstruction& IA32inst, con
             throw ConversionException(virtual_address, "Address value already used: 0x%x", inst.address_value);
         }
         op.type = OpType::IMM_MEM;
+        if (IA32inst.operands[op_index].mem.segment != ZYDIS_REGISTER_CS) {
+            // moffs operands are offsets from the base address of the segment provided (through prefixes)
+            // We only have the base address of the current code segment
+            throw ConversionException(virtual_address, "Cannot deduce the base address of another segment");
+        }
         // Unsigned offset relative to the current segment
-        inst.address_value = segment_base_address + IA32inst.operands[op_index].imm.value.u;
+        inst.address_value = segment_base_address + IA32inst.operands[op_index].mem.disp.value;
         break;
 
     case Operand::ptr16_32:
@@ -1035,6 +1040,7 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
     // Size overrides
     if (extract_data.keep_overrides) {
         inst.operand_size_override = IA32inst.operand_width == 16; // 16-bits override
+        inst.operand_byte_size_override = IA32inst.operand_width == 8; // 8-bits override
     }
 
     if (IA32inst.address_width != 32) {
@@ -1069,10 +1075,33 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
                 inst.reg = IA32inst.raw.sib.index;
                 inst.scale = IA32inst.raw.sib.scale;
 
-                if (IA32inst.raw.sib.base == 0b101 && IA32inst.raw.modrm.mod == 0b00) {
-                    inst.base_present = false;
+                if (IA32inst.raw.sib.base == 0b101) {
+                    switch (IA32inst.raw.modrm.mod) {
+                    case 0b00:
+                        // No base, with 32 bit displacement
+                        inst.base_present = false;
+                        inst.displacement_present = true;
+                        inst.address_value = IA32inst.raw.disp.value;
+                        break;
+
+                    case 0b01:
+                        // With EBP base, with 8 bit displacement
+                        inst.base_present = true;
+                        inst.base_reg = uint8_t(Register::EBP);
+                        inst.address_value = int32_t(int8_t(uint8_t(IA32inst.raw.disp.value)));
+                        break;
+
+                    case 0b10:
+                        // With EBP base, with 32 bit displacement
+                        inst.base_present = true;
+                        inst.base_reg = uint8_t(Register::EBP);
+                        inst.displacement_present = true;
+                        inst.address_value = IA32inst.raw.disp.value;
+                        break;
+                    }
                 }
                 else {
+                    // Normal base specification
                     inst.base_present = true;
                     inst.base_reg = IA32inst.raw.sib.base;
                 }
@@ -1083,23 +1112,25 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
                 inst.reg = IA32inst.raw.modrm.rm;
             }
 
-            // Displacement
-            switch (IA32inst.raw.modrm.mod) {
-            case 0b00:
-                inst.displacement_present = false;
-                break;
+            if (!inst.displacement_present) {
+                // Displacement (if it has not been already specified by the SIB byte)
+                switch (IA32inst.raw.modrm.mod) {
+                case 0b00:
+                    inst.displacement_present = false;
+                    break;
 
-            case 0b01:
-                inst.displacement_present = true;
-                // 8 bits displacement
-                inst.address_value = (int32_t) ((int8_t) ((uint8_t) IA32inst.raw.disp.value));
-                break;
+                case 0b01:
+                    inst.displacement_present = true;
+                    // 8 bits displacement
+                    inst.address_value = int32_t(int8_t(uint8_t(IA32inst.raw.disp.value)));
+                    break;
 
-            case 0b10:
-                inst.displacement_present = true;
-                // 32 bits displacement
-                inst.address_value = IA32inst.raw.disp.value;
-                break;
+                case 0b10:
+                    inst.displacement_present = true;
+                    // 32 bits displacement
+                    inst.address_value = IA32inst.raw.disp.value;
+                    break;
+                }
             }
         }
     }
@@ -1174,6 +1205,22 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
 
     inst.write_ret2_to_register = extract_data.write_ret_2_register;
     inst.scale_output_override = extract_data.write_ret_register_scale;
+
+    if (inst.displacement_present) {
+        // Make the displacement (if any) an IMM_MEM operand
+        if (inst.op1.type == OpType::IMM_MEM || inst.op2.type == OpType::IMM_MEM) {
+            // There is already one IMM_MEM operand, everything is fine
+        }
+        else if (!inst.is_op1_none() && !inst.is_op2_none()) {
+            // No available operand
+            throw ConversionException(virtual_address, "Cannot make the displacement an operand, both are already taken.");
+        }
+        else {
+            Instruction::Operand& op = inst.is_op1_none() ? inst.op1 : inst.op2;
+            op.type = OpType::IMM_MEM;
+            op.read = true;
+        }
+    }
 
     // Register operand to register index
     switch (extract_data.write_ret_out_register) {

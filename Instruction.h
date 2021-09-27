@@ -66,6 +66,9 @@ struct Instruction {
 
     uint8_t opcode;
 
+    // TODO : maybe store some of the bits required for computing the address in the register bits of the operand which
+    //  has the type MEM, like reg and scale (scale is NOT the size of the register!) -> yeah do that yeah good idea
+
     /// Struct describing an operand, present in order for IA32::Mapping::convert_operand to exist.
     /// An additional field for 'write' would have been great but the struct is already 8 bits long.
     struct Operand {
@@ -73,8 +76,10 @@ struct Instruction {
         Register reg : 5;
         bool read : 1;
 
-        constexpr bool operator==(const Operand& other) const = default;
+        /*constexpr*/ bool operator==(const Operand& other) const = default; // TODO : re-enable constexpr when the GCC bug is fixed
     } op1, op2;
+
+    // TODO : docs for all fields
 
     // Flags
     bool operand_size_override : 1;
@@ -95,11 +100,12 @@ struct Instruction {
 
     // Addressing
     // An effective address needs to be computed if any of reg_present, base_present or displacement_present is true
-    bool reg_present : 1;
-    uint8_t reg : 3;
-    uint8_t scale : 2;
-    bool base_present : 1;
-    uint8_t base_reg : 3;
+    // Formula for the address: [reg*(scale) + base] + disp, if any is not present, it is replaced by zero
+    bool reg_present : 1;   // If 'reg' contains a register index
+    uint8_t reg : 3;        // Register used as an index to the memory
+    uint8_t scale : 2;      // Scale of the register index ('0b00' -> 1, '0b01' -> 2, '0b10' -> 4, '0b11' -> 8)
+    bool base_present : 1;  // If 'base_reg' contains a register index
+    uint8_t base_reg : 3;   // Register used as a base to the memory
     uint8_t displacement_present : 1; // The displacement is stored in the address_value field
 
     uint8_t : 0; // alignment (16 bits)
@@ -108,11 +114,11 @@ struct Instruction {
     uint32_t address_value;
     uint32_t immediate_value;
 
-    // The Operand struct by itself cannot describe when it is not use, here is how to do it for both operands:
+    // The Operand struct by itself cannot describe when it is not used, here is how to do it for both operands:
     [[nodiscard]] constexpr bool is_op1_none() const { return !op1.read && !write_ret1_to_op1; }
     [[nodiscard]] constexpr bool is_op2_none() const { return !op2.read && !write_ret2_to_op2; }
 
-    constexpr bool operator==(const Instruction& other) const = default;
+    /*constexpr*/ bool operator==(const Instruction& other) const = default; // TODO : re-enable constexpr when the GCC bug is fixed
 };
 
 

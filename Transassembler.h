@@ -42,7 +42,7 @@ public:
      * However doing this implies that we know all offsets we jump to at compile time, meaning that any jumps using
      * register values cannot be processed here.
      */
-    void process_jumps();
+    void process_code_segment_references();
 
 
     void convert_instructions(const IA32::Mapping& mapping);

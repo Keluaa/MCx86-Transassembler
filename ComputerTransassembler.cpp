@@ -96,7 +96,7 @@ int disassemble_elf(const std::string& elf_file)
     printf("Disassembling segment %d...\n", segment->get_index());
 
     Transassembler transassembler((const uint8_t*) segment->get_data(), segment->get_file_size(), segment->get_virtual_address());
-    transassembler.process_jumps();
+    transassembler.process_code_segment_references();
     transassembler.print_disassembly(formatter);
     transassembler.convert_instructions(mapping);
 
