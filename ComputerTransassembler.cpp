@@ -91,7 +91,7 @@ int disassemble_elf(const std::string& elf_file)
 
     printf("Entry point: 0x%x\n", entry_point);
 
-    // The first segment is guaranteed to be the one containing all of the interesting code by the linker script
+    // The first segment is guaranteed to be the one containing all the interesting code by the linker script
     const ELFIO::segment* segment = elf_reader.segments[0];
     printf("Disassembling segment %d...\n", segment->get_index());
 

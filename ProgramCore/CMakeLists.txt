@@ -7,9 +7,18 @@ set(Program_Core_Linker_Script linking.ld)
 
 set(Program_Core_Executable Program_core.exe)
 
+set(Program_Core_Compile_Flags)
+
+# Build the list of assembly files by replacing the extension in them
+foreach(source_file ${Program_Core_Sources})
+    string(REGEX REPLACE "\\.c$" ".s" assembly_file ${source_file})
+    list(APPEND Program_Core_Assembly_files ${assembly_file})
+endforeach()
+
 # We want a static binairy (no relocation needed anywhere) for x86
 set(Program_Core_Compile_Flags
         -m32                    # Compile for the x86 Architecture
+        -masm='intel'           # Use intel assembly format, for easier asm injection
         -ffreestanding          # No external or standard library needed
         -fno-pic                # Don't generate Position Independent Code (which uses the Global Offset Table)
         -fno-pie                # Don't generate a Position Independent Executable
@@ -23,20 +32,37 @@ set(Program_Core_Link_Flags
         -nostartfiles           # Do not use the standard startup functions
         --entry=_start)         # Use our _start function as the entry point
 
-set(Program_Core_CMD
+set(Program_Core_Compile_CMD
+        gcc
+        -S                      # Make an assembly file, since there is some preprocessing to be done first.
+        ${Program_Core_Compile_Flags}
+        ${Program_Core_Sources})
+
+# Get the relative path to the preprocessor from the source directory
+file(RELATIVE_PATH Assembly_Preprocessor_relpath ${CMAKE_SOURCE_DIR}/ProgramCore ${PROJECT_BINARY_DIR}/assembly_preprocessor/$<TARGET_FILE_NAME:Assembly_Preprocessor>)
+
+set(Program_Core_Preprocess_CMD
+        ${Assembly_Preprocessor_relpath}
+        ${Program_Core_Assembly_files})
+
+set(Program_Core_Link_CMD
         gcc
         ${Program_Core_Compile_Flags}
         ${Program_Core_Link_Flags}
         -T ${Program_Core_Linker_Script} # Build the output file using our custom linker script
         -o ${Program_Core_Executable}
-        ${Program_Core_Sources})
+        ${Program_Core_Assembly_files})
 
 # Use WSL in order to use gcc without any Windows related problems
 add_custom_target(Program_core
-        COMMAND wsl ${Program_Core_CMD}
+        COMMAND wsl ${Program_Core_Compile_CMD}         # Compile the sources into assembly files
+        COMMAND wsl ${Program_Core_Preprocess_CMD}      # Preprocess the assembly files
+        COMMAND wsl ${Program_Core_Link_CMD}            # Link the assembly files into an executable
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ProgramCore
         SOURCES ${Program_Core_Sources} # only useful for the IDE
         COMMENT "Creating the core executable..."
-        BYPRODUCTS ${Program_Core_Executable}
+        BYPRODUCTS ${Program_Core_Executable} ${Program_Core_Assembly_files}
         VERBATIM
         USES_TERMINAL)
+
+add_dependencies(Program_core Assembly_Preprocessor)

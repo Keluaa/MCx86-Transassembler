@@ -38,6 +38,7 @@ MEMORY
     ELF file layout.
     
     The following symbols are defined:
+     - rodata_start: address of the start of the read-only data section
      - rodata_end: address of the end of the read-only data section
      - data_start: address of the start of the data section
      - data_end (not exported): address of the end of the data section
@@ -45,7 +46,7 @@ MEMORY
  */
 SECTIONS
 {
-    . = 0x10000;
+    . = 0x0;
 
     .text : {
         *(.text)            /* Put all code sections here */
@@ -56,6 +57,12 @@ SECTIONS
         *(.eh_frame)        /*  */
     } > TEXT
       :seg_other
+
+    .labels : {
+        rodata_start = .;
+        *(.labels)          /* Custom sections containing labels to instructions */
+    } > ROM                 /* In the ROM memory block */
+      :seg_data
 
     .rodata : {
         *(.rodata)          /* Read only data sections */

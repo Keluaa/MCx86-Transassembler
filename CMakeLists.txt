@@ -24,6 +24,9 @@ add_executable(ComputerTransassembler
 
 target_link_libraries(ComputerTransassembler PRIVATE "Zydis")
 
+# AssemblyPreprocessor
+add_subdirectory(assembly_preprocessor)
+
 # ProgramCore
 add_subdirectory(ProgramCore)
 

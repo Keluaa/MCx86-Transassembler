@@ -47,6 +47,9 @@ public:
 
     void convert_instructions(const IA32::Mapping& mapping);
 
+    // TODO
+    void parse_labels_section();
+    void update_labels_section();
 
     /**<
      * Prints instructions with their address, number and jump numbers.
