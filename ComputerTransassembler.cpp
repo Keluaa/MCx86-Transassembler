@@ -1,5 +1,9 @@
-
+﻿
 #include <cstdio>
+#include <iostream>
+#include <iomanip>
+#include <filesystem>
+
 #include <Zydis/Zydis.h>
 #include <elfio.hpp>
 
@@ -64,7 +68,16 @@ bool load_mapping(const std::string& mapping_file_name)
 }
 
 
-int disassemble_elf(const std::string& elf_file)
+void write_memory_map(comst ELFIO::elfio& elf_reader, const std::string& file_name)
+{
+	const ELFIO::Elf32_Addr entry_point = elf_reader.get_entry();
+
+	std::cout << "Entry point: 0x" << std::hex << entry_point << "\n";
+
+}
+
+
+int transassemble_elf(const std::string& elf_file)
 {
     ELFIO::elfio elf_reader;
 
@@ -87,21 +100,42 @@ int disassemble_elf(const std::string& elf_file)
                bool(segment->get_flags() & PF_X));
     }
 
-    const ELFIO::Elf32_Addr entry_point = elf_reader.get_entry();
-
-    printf("Entry point: 0x%x\n", entry_point);
-
+    // Get the section containing labels (addresses) to instructions
+    // This section may be absent.
+    const ELFIO::section* labels_section = elf_reader.sections["labels"];
+    
     // The first segment is guaranteed to be the one containing all the interesting code by the linker script
     const ELFIO::segment* segment = elf_reader.segments[0];
-    printf("Disassembling segment %d...\n", segment->get_index());
-
+    
+    std::cout << "Transassembling text segment..\n";
+    
     Transassembler transassembler((const uint8_t*) segment->get_data(), segment->get_file_size(), segment->get_virtual_address());
+    
     transassembler.process_code_segment_references();
     transassembler.print_disassembly(formatter);
     transassembler.convert_instructions(mapping);
+    
+    if (section != nullptr) {
+    	// I am too lazy to create a new data array and set it, so const_cast it is
+    	transassembler.update_labels_section(elf_reader.get_convertor(), const_cast<uint8_t*>(section->get_data()), section->get_size());
+		std::cout << "Re-wrote " << (section->get_size() / 4) << " labels.\n";
+	}
+	else {
+		std::cout << "No labels section.\n";
+	}
+	
+    std::cout << "Successfully transassembled the text segment.\n";
 
-    printf("Successfully disassembled segment %d.\n", segment->get_index());
-
+	std::filesystem::path new_elf_file(elf_file);
+	new_elf_file.replace_filename(new_elf_file.stem().string() + "_new" + new_elf_file.extension().string());
+	
+	if(elf_reader.save(new_elf_file.string())) {
+		printf("Saved the new ELF to '%s'\n", new_elf_file.string());
+	}
+	else {
+		printf("Could not save the ELF to '%s'\n", new_elf_file.string());
+	}
+	
     return 0;
 }
 
@@ -122,7 +156,7 @@ int main()
 
     ZydisFormatterInit(&formatter, ZYDIS_FORMATTER_STYLE_INTEL);
 
-    if (!disassemble_elf(elf_file)) {
+    if (!transassemble_elf(elf_file)) {
         return 1;
     }
 
