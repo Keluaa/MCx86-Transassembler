@@ -1,4 +1,4 @@
-﻿
+
 #ifndef TRANSASSEMBLER_H
 #define TRANSASSEMBLER_H
 
@@ -47,7 +47,9 @@ public:
 
     void convert_instructions(const IA32::Mapping& mapping);
 
-    void update_labels_section(const ELFIO::endianess_convertor& conv, uint8_t* data, size_t labels_size);
+    // TODO
+    void parse_labels_section();
+    void update_labels_section();
 
     /**<
      * Prints instructions with their address, number and jump numbers.
@@ -75,7 +77,7 @@ private:
      * x86 instructions decoder
      */
     ZydisDecoder decoder;
-        
+
     /**
      * Map of instructions with a jump, and the instruction number they jump to.
      */
@@ -85,6 +87,7 @@ private:
      * Maps the address of all instructions to their index.
      */
     std::map<ZyanUSize, uint32_t> instructions_numbers;
+
 
     static const size_t INST_BUFFER_SIZE = 2048;
 

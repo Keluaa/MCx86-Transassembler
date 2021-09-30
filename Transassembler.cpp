@@ -1,8 +1,6 @@
-﻿
-#include <bit>
+
 #include <cstdio>
 #include <cstring>
-#include <cstdint>
 
 #include "Transassembler.h"
 
@@ -221,24 +219,6 @@ constexpr ZyanUSize Transassembler::get_jump_address(const ZydisDecodedInstructi
 
 constexpr bool Transassembler::does_instruction_branches(const ZydisDecodedInstruction& inst) {
     return inst.meta.branch_type != ZYDIS_BRANCH_TYPE_NONE;
-}
-
-
-void Transassembler::update_labels_section(const ELFIO::endianess_convertor& conv, uint8_t* labels_data, size_t labels_size)
-{
-	uint32_t* p_data = reinterpret_cast<uint32_t*>(labels_data);
-	uint32_t* p_data_end = p_data + (labels_size / sizeof(uint32_t));
-	
-	for (int i = 0; p_data < p_data_end; i++, p_data++) {
-		uint32_t label = conv(*p_data);
-		if (instructions_numbers.contains(label)) {
-			*p_data = conv(instructions_numbers[label]);
-		}
-		else {
-			// Missing instruction target
-			printf("WARNING: label target not found: 0x%x\n", label);
-		}
-	}
 }
 
 
