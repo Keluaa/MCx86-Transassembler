@@ -1,8 +1,6 @@
 ﻿
-#include <bit>
 #include <cstdio>
 #include <cstring>
-#include <cstdint>
 
 #include "Transassembler.h"
 
@@ -15,7 +13,7 @@ Transassembler::Transassembler(const uint8_t* data, const size_t size, const uin
 }
 
 
-void Transassembler::process_code_segment_references()
+void Transassembler::process_jumping_instructions()
 {
     // Maps the instruction targets to their jumping instructions.
     std::unordered_multimap<ZyanUSize, uint32_t> unprocessed_jump_targets;
@@ -226,7 +224,7 @@ constexpr bool Transassembler::does_instruction_branches(const ZydisDecodedInstr
 
 void Transassembler::update_labels_section(const ELFIO::endianess_convertor& conv, uint8_t* labels_data, size_t labels_size)
 {
-	uint32_t* p_data = reinterpret_cast<uint32_t*>(labels_data);
+    uint32_t* p_data = reinterpret_cast<uint32_t*>(labels_data);
 	uint32_t* p_data_end = p_data + (labels_size / sizeof(uint32_t));
 	
 	for (int i = 0; p_data < p_data_end; i++, p_data++) {
@@ -237,35 +235,37 @@ void Transassembler::update_labels_section(const ELFIO::endianess_convertor& con
 		else {
 			// Missing instruction target
 			printf("WARNING: label target not found: 0x%x\n", label);
+            *p_data = 0;
 		}
 	}
 }
 
 
-void Transassembler::convert_instructions(const IA32::Mapping& mapping)
+void Transassembler::convert_instructions(const IA32::Mapping& mapping, std::filebuf& out_file)
 {
-    size_t i = 0;
+    const size_t BUFFER_SIZE = 512;
 
     ZydisDecodedInstruction IA32_inst;
     ZyanU64 runtime_address = segment_address;
     ZyanUSize offset = 0;
     uint32_t current_inst = 0;
 
-    Instruction* inst;
-    while (i < INST_BUFFER_SIZE) {
-        inst = inst_buffer + i;
-        i++;
+    size_t buffer_pos = 0;
+
+    while (offset < size) {
+        Instruction inst{};
 
         if (!ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, data + offset, size - offset, &IA32_inst))) {
             // TODO : problem
             break;
         }
 
-        mapping.convert_instruction(IA32_inst, *inst, runtime_address, segment_address);
+        mapping.convert_instruction(IA32_inst, inst, runtime_address, segment_address);
 
         // Handle special cases
-        switch (inst->opcode) {
+        switch (inst.opcode) {
         default:
+            // TODO : transform some instructions, such as 'XCHG EAX, EAX' to 'NOP'
             break;
         }
 
@@ -273,12 +273,16 @@ void Transassembler::convert_instructions(const IA32::Mapping& mapping)
         runtime_address += IA32_inst.length;
         current_inst++;
 
-        // TODO : transform some instructions, such as 'XCHG EAX, EAX' to 'NOP'
-        // TODO : write the buffer to file, clear buffer, repeat...
         // TODO : edit addresses pointing to the code segment
 
-        if (size <= offset) {
-            break; // All instructions have been parsed
+        // Write the instruction to the file buffer
+        out_file.sputn(reinterpret_cast<const char*>(&inst), sizeof(Instruction));
+        buffer_pos++;
+
+        if (buffer_pos > BUFFER_SIZE) {
+            // Write the buffer to the file (flush)
+            out_file.pubsync();
+            buffer_pos = 0;
         }
     }
 }

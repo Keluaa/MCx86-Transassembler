@@ -1,7 +1,5 @@
 ﻿
-#include <cstdio>
 #include <iostream>
-#include <iomanip>
 #include <filesystem>
 
 #include <Zydis/Zydis.h>
@@ -11,9 +9,7 @@
 
 
 static ZydisFormatter formatter;
-
 static IA32::Mapping mapping;
-
 static ComputerOpcodesInfo opcodes_info;
 
 
@@ -68,17 +64,62 @@ bool load_mapping(const std::string& mapping_file_name)
 }
 
 
-void write_memory_map(comst ELFIO::elfio& elf_reader, const std::string& file_name)
+void write_memory_map(const std::string& file_name, ELFIO::Elf32_Addr entry_point, uint32_t instructions_count)
 {
-	const ELFIO::Elf32_Addr entry_point = elf_reader.get_entry();
+    // See the custom linker script (linking.ld) for the custom memory layout
+    const ELFIO::Elf32_Addr text_start = 0x010000;
+    const ELFIO::Elf32_Addr rom_start = 0x200000;
+    const ELFIO::Elf32_Addr ram_start = 0x400000;
 
-	std::cout << "Entry point: 0x" << std::hex << entry_point << "\n";
+    std::ofstream memory_map_file(file_name);
+    if (!memory_map_file) {
+        std::cout << "Could not open the memory map file: '" << file_name << "'" << std::endl;
+        return;
+    }
 
+    memory_map_file << std::hex;
+    memory_map_file << entry_point << "\n";
+    memory_map_file << text_start << "\n";
+    memory_map_file << text_start + instructions_count << "\n";
+    memory_map_file << rom_start;
+    memory_map_file << ram_start;
+
+    memory_map_file.close();
+}
+
+
+void write_memory_contents(const std::string& file_name, const ELFIO::segment* data_segment)
+{
+    // TODO : check that the changes applied to the labels section are still present in the data segment
+
+    const std::streamsize CHUNK_SIZE = 4096; // Write to the file by chunks of 4 kB
+
+    std::filebuf memory_file;
+    if (!memory_file.open(file_name, std::ios::out | std::ios::binary)) {
+        std::cout << "Could not open the memory data file: '" << file_name << "'" << std::endl;
+        return;
+    }
+
+    const char* data = data_segment->get_data();
+    std::streamsize pos = 0;
+    std::streamsize size = std::streamsize(data_segment->get_file_size());
+
+    while (pos < size) {
+        memory_file.sputn(data, std::min(CHUNK_SIZE, size - pos));
+        memory_file.pubsync(); // flush the file buffer
+
+        data += CHUNK_SIZE;
+        pos += CHUNK_SIZE;
+    }
+
+    memory_file.close();
 }
 
 
 int transassemble_elf(const std::string& elf_file)
 {
+    const std::string instructions_file_name = "instructions.bin";
+
     ELFIO::elfio elf_reader;
 
     if (!elf_reader.load(elf_file)) {
@@ -86,56 +127,48 @@ int transassemble_elf(const std::string& elf_file)
         return 1;
     }
 
-    puts("Segments:");
-    puts("  i -|- t -|-  s  -|- R W X -|");
-    for (const ELFIO::segment* segment : elf_reader.segments) {
-        if (segment->get_type() > 10) {
-            continue; // compiler info segment
-        }
-
-        printf(" %3d |  %d  |  %3d  |  %d %d %d\n",
-               segment->get_index(), segment->get_type(), segment->get_sections_num(),
-               bool(segment->get_flags() & PF_R),
-               bool(segment->get_flags() & PF_W),
-               bool(segment->get_flags() & PF_X));
-    }
+    std::cout << "Transassembling '" << elf_file << "'...\n";
 
     // Get the section containing labels (addresses) to instructions
     // This section may be absent.
-    const ELFIO::section* labels_section = elf_reader.sections["labels"];
+    const ELFIO::section* labels_section = elf_reader.sections[".labels"];
     
     // The first segment is guaranteed to be the one containing all the interesting code by the linker script
     const ELFIO::segment* segment = elf_reader.segments[0];
-    
-    std::cout << "Transassembling text segment..\n";
-    
-    Transassembler transassembler((const uint8_t*) segment->get_data(), segment->get_file_size(), segment->get_virtual_address());
-    
-    transassembler.process_code_segment_references();
-    transassembler.print_disassembly(formatter);
-    transassembler.convert_instructions(mapping);
-    
-    if (section != nullptr) {
-    	// I am too lazy to create a new data array and set it, so const_cast it is
-    	transassembler.update_labels_section(elf_reader.get_convertor(), const_cast<uint8_t*>(section->get_data()), section->get_size());
-		std::cout << "Re-wrote " << (section->get_size() / 4) << " labels.\n";
-	}
-	else {
-		std::cout << "No labels section.\n";
-	}
-	
-    std::cout << "Successfully transassembled the text segment.\n";
 
-	std::filesystem::path new_elf_file(elf_file);
-	new_elf_file.replace_filename(new_elf_file.stem().string() + "_new" + new_elf_file.extension().string());
+    Transassembler transassembler((const uint8_t*) segment->get_data(), segment->get_file_size(), segment->get_virtual_address());
+
+    std::cout << "Processing jumps..." << std::endl;
+    transassembler.process_jumping_instructions();
+
+    if (labels_section != nullptr) {
+        // I am too lazy to create a new data array and set it, so const_cast it is
+        std::cout << "Re-writing the labels section... (for " << (labels_section->get_size() / 4) << " labels)" << std::endl;
+        transassembler.update_labels_section(elf_reader.get_convertor(),
+                                             reinterpret_cast<uint8_t*>(const_cast<char*>(labels_section->get_data())),
+                                             labels_section->get_size());
+    }
+    else {
+        std::cout << "No labels section." << std::endl;
+    }
+
+    std::filebuf instructions_file;
+    if (!instructions_file.open(instructions_file_name, std::ios::out | std::ios::binary)) {
+        std::cout << "Could not open the instructions file: '" << instructions_file_name << "'" << std::endl;
+        return 1;
+    }
+
+    std::cout << "Converting instructions..." << std::endl;
+    transassembler.convert_instructions(mapping, instructions_file);
+
+    instructions_file.close();
 	
-	if(elf_reader.save(new_elf_file.string())) {
-		printf("Saved the new ELF to '%s'\n", new_elf_file.string());
-	}
-	else {
-		printf("Could not save the ELF to '%s'\n", new_elf_file.string());
-	}
-	
+    std::cout << "Successfully transassembled the elf file." << std::endl;
+
+    write_memory_map("memory_map.txt", elf_reader.get_entry(), transassembler.get_instructions_count());
+
+    write_memory_contents("memory_data.bin", elf_reader.segments[2]);
+
     return 0;
 }
 
