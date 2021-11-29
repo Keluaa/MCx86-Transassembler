@@ -1,5 +1,7 @@
 ﻿
+#include <iostream>
 #include <cstring>
+#include <limits>
 #include <charconv>
 #include <array>
 #include <any>
@@ -27,10 +29,9 @@
  * @param format The format string
  * @param args Array of std::any of either bool*, uint32_t* or std::string*. They should point to the default values of
  *  the format
- * @return The number of characters extracted from the input string, or -1 if there was an error
  */
 template<size_t N>
-int scan_optional_format(const std::string& str, const char* format, const std::array<std::any, N>& args)
+void scan_optional_format(const std::string& str, const char* format, const std::array<std::any, N>& args)
 {
     size_t args_index = 0;
 
@@ -44,7 +45,7 @@ int scan_optional_format(const std::string& str, const char* format, const std::
     char format_c;
     while ((format_c = *format++) != '\0'
            && args_index < N
-           && status.ptr != str_end) {
+           && status.ptr < str_end) {
         if (format_c == '%') {
             switch(*format++) {
             case '\0':
@@ -143,12 +144,10 @@ int scan_optional_format(const std::string& str, const char* format, const std::
     }
 
     // The last 'status.ptr' value should point to the character before the '\0'
-    if (status.ptr - str_end != 0) {
+    if (status.ptr - str_end != -1) {
     	std::string parsed(str, int(status.ptr - str_end));
     	throw IA32::LoadingException("The last string pos isn't at the end of the string:\nStopped at:\t'%s' (%d)\nComplete str:\t'%s' (%d)", parsed.c_str(), int(status.ptr - str.c_str()), str.c_str(), int(str_end - str.c_str()));
     }
-    
-    return 0;
 }
 
 
@@ -293,17 +292,23 @@ static IA32::Operand operand_descriptor_from_str(const char* desc)
  *
  * @param digit_flag_present If the opcode is extended by the reg part of the Mod r/m byte, symbolised by a /digit in
  *  the manual
+ * @param register_in_opcode If the opcode contains the register for the first operand.
  * @param first_operand First operand of the instruction
  * @param second_operand Second operand of the instruction
  */
-static constexpr bool is_mod_rm_byte_present(bool digit_flag_present, IA32::Operand first_operand, IA32::Operand second_operand)
+static constexpr bool is_mod_rm_byte_present(bool digit_flag_present, bool register_in_opcode, IA32::Operand first_operand, IA32::Operand second_operand)
 {
     if (digit_flag_present) {
         return true;
     }
 
+    if (register_in_opcode) {
+        // All instructions supported don't use a Mod r/m byte when they have a register in their opcode
+        return false;
+    }
+
     for (auto&& operand : {first_operand, second_operand}) {
-        switch (first_operand) {
+        switch (operand) {
         case IA32::Operand::r:
         case IA32::Operand::r8:
         case IA32::Operand::r16:
@@ -446,9 +451,12 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
 
         // Scan the line
         const char format[] = "%x,%d,%b,%s,%b,%s,%s,%s,%b,%b,%b,%b,%b,%b,%s,%o\r";
-        if (scan_optional_format(line, format, format_values)) {
-            // Not all of the line has been parsed
-            throw LoadingException("Invalid characters at line %d (mnemonic: %s)", line_nb + 2, inst.mnemonic);
+        try {
+            scan_optional_format(line, format, format_values);
+        }
+        catch (const IA32::LoadingException& e) {
+            std::cout << "Error while parsing line " << line_nb << "\n";
+            throw;
         }
 
         // The two non-optional values
@@ -475,7 +483,7 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
         inst.write_ret_out_register = explicit_register_from_name(tmp_ret_reg.c_str());
         inst.immediate_value = (uint8_t) tmp_imm_val;
 
-        inst.has_mod_byte = is_mod_rm_byte_present(extension != 0, inst.operand_1, inst.operand_2);
+        inst.has_mod_byte = is_mod_rm_byte_present(extension != 0, repeat_for_all_registers, inst.operand_1, inst.operand_2);
 
         ComputerOpcodesInfo::OpcodeInfo opcode_info = opcodes_info.get_infos(inst.equiv_mnemonic);
         inst.equiv_opcode = opcode_info.opcode;
@@ -1146,7 +1154,6 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
     }
 
     if (extract_data.has_mod_byte != bool(IA32inst.attributes & ZYDIS_ATTRIB_HAS_MODRM)) {
-        // TODO : remove if unnecessary
         throw ConversionException(virtual_address, "Invalid implementation, extraction info is different from the one of the decompiler.");
     }
 
@@ -1215,22 +1222,6 @@ void IA32::Mapping::convert_instruction(const ZydisDecodedInstruction& IA32inst,
 
     inst.write_ret2_to_register = extract_data.write_ret_2_register;
     inst.scale_output_override = extract_data.write_ret_register_scale;
-
-    if (inst.displacement_present) {
-        // Make the displacement (if any) an IMM_MEM operand
-        if (inst.op1.type == OpType::IMM_MEM || inst.op2.type == OpType::IMM_MEM) {
-            // There is already one IMM_MEM operand, everything is fine
-        }
-        else if (!inst.is_op1_none() && !inst.is_op2_none()) {
-            // No available operand
-            throw ConversionException(virtual_address, "Cannot make the displacement an operand, both are already taken.");
-        }
-        else {
-            Instruction::Operand& op = inst.is_op1_none() ? inst.op1 : inst.op2;
-            op.type = OpType::IMM_MEM;
-            op.read = true;
-        }
-    }
 
     // Register operand to register index
     switch (extract_data.write_ret_out_register) {

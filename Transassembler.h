@@ -4,13 +4,48 @@
 #include <map>
 #include <unordered_map>
 #include <cstdint>
+#include <exception>
+#include <sstream>
 
 #include <Zydis/Zydis.h>
 #include <elfio.hpp>
-#include <elfio_utils.hpp>
+#include <elfio.hpp>
 
 #include "Instruction.h"
 #include "IA32Mapping.h"
+
+
+class TransassemblingException : public std::exception
+{
+protected:
+    std::string msg;
+
+public:
+    TransassemblingException(const char* msg, const ZydisDecodedInstruction& inst) noexcept
+    {
+        uint16_t opcode = inst.opcode;
+        opcode |= inst.opcode_map == ZYDIS_OPCODE_MAP_0F ? 0x0F00 : 0x0000;
+
+        std::stringstream ss;
+        ss << msg;
+        ss << "\nFaulty instruction: " << ZydisMnemonicGetString(inst.mnemonic) << " (0x" << std::hex << opcode << ")";
+        this->msg = ss.str();
+    }
+
+    TransassemblingException(const char* msg, const ZydisDecodedInstruction& inst, ZyanUSize address) noexcept
+    {
+        uint16_t opcode = inst.opcode;
+        opcode |= inst.opcode_map == ZYDIS_OPCODE_MAP_0F ? 0x0F00 : 0x0000;
+
+        std::stringstream ss;
+        ss << msg;
+        ss << "\nFaulty instruction: " << ZydisMnemonicGetString(inst.mnemonic) << " (0x" << std::hex << opcode << ")";
+        ss << "\nAddress: 0x" << address << "\n";
+        this->msg = ss.str();
+    }
+
+    [[nodiscard]] const char* what() const noexcept override { return msg.c_str(); }
+};
 
 
 class Transassembler {

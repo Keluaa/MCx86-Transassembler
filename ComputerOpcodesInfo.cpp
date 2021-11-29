@@ -2,6 +2,7 @@
 #include <cstdarg>
 #include <stdexcept>
 #include <sstream>
+#include <limits>
 #include <charconv>
 
 #include "ComputerOpcodesInfo.h"
@@ -140,7 +141,7 @@ bool ComputerOpcodesInfo::load_map(std::fstream& opcodes_file)
         opcodes_map.insert(std::pair<std::string, OpcodeInfo>(mnemonic, {(uint8_t) opcode, get_flags, get_control_registers}));
     }
 
-    return opcodes_file.fail();
+    return opcodes_file.bad() || (!opcodes_file.eof() && opcodes_file.fail());
 }
 
 

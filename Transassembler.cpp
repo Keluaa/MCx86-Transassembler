@@ -132,7 +132,10 @@ constexpr bool Transassembler::is_instruction_a_jump(const ZydisDecodedInstructi
         return true;
 
     default:
-        assert(!does_instruction_branches(inst)); // if this fails then there is an instruction missing above
+        if (does_instruction_branches(inst)) {
+            // If this fails then there is an instruction missing in the cases above
+            throw TransassemblingException("Unhandled jumping instruction.", inst);
+        }
         return false; // no jumps for this instruction
     }
 }
@@ -151,14 +154,32 @@ constexpr ZyanUSize Transassembler::get_jump_address(const ZydisDecodedInstructi
         if (op.type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
             // Relative offset
             if (!op.imm.is_relative) {
-                assert(0); // Should be relative
+                throw TransassemblingException("Operand should be relative.", inst, inst_address);
             }
 
-            assert(ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, &op, inst_address, &abs_addr)));
+            if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, &op, inst_address, &abs_addr))) {
+                throw TransassemblingException("Absolute address (relative offset) calculation failed.", inst, inst_address);
+            }
         }
         else {
             // Address in the Mod r/m. If it uses an address from a register, then we have a problem.
-            assert(ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, &op, inst_address, &abs_addr)));
+            if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, &op, inst_address, &abs_addr))) {
+                // What we don't allow : jumping to instructions outside the pre-decoded instructions area, or using
+                //      a pre-determined offset stored in the data section of the memory (ROM or RAM)
+                // What we allow : jumping using an offset table stored in ROM which has been corrected
+                // To reflect those conditions, jumps from a memory offset (or absolute address) accessed using a 4
+                // times scaled index from a base is allowed.
+
+                if (op.type == ZYDIS_OPERAND_TYPE_MEMORY && op.encoding == ZYDIS_OPERAND_ENCODING_MODRM_RM
+                        && op.mem.type == ZYDIS_MEMOP_TYPE_MEM && op.mem.segment == ZYDIS_REGISTER_DS
+                        && op.mem.base == ZYDIS_REGISTER_NONE && op.mem.index != ZYDIS_REGISTER_NONE
+                        && op.mem.scale == 4 && op.mem.disp.has_displacement) {
+                    break; // Is ok.
+                }
+                else {
+                    throw TransassemblingException("Absolute address (mod r/m) calculation failed.", inst, inst_address);
+                }
+            }
         }
         break;
     }
@@ -170,13 +191,17 @@ constexpr ZyanUSize Transassembler::get_jump_address(const ZydisDecodedInstructi
     case ZYDIS_MNEMONIC_LOOP:
     case ZYDIS_MNEMONIC_LOOPE:
     case ZYDIS_MNEMONIC_LOOPNE:
-        assert(ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, inst.operands + 0, inst_address, &abs_addr)));
+        if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, inst.operands + 0, inst_address, &abs_addr))) {
+            throw TransassemblingException("Absolute address (LOOP*) calculation failed.", inst, inst_address);
+        }
         break;
 
     case ZYDIS_MNEMONIC_RET:
         if (inst.operand_count == 1) {
             // Relative offset from the immediate
-            assert(ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, inst.operands + 0, inst_address, &abs_addr)));
+            if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, inst.operands + 0, inst_address, &abs_addr))) {
+                throw TransassemblingException("Absolute address (RET) calculation failed.", inst, inst_address);
+            }
         }
         else {
             // EIP is popped from the stack, nothing to do
@@ -206,7 +231,9 @@ constexpr ZyanUSize Transassembler::get_jump_address(const ZydisDecodedInstructi
     case ZYDIS_MNEMONIC_JS:
     case ZYDIS_MNEMONIC_JZ:
         // All variants use a relative offset
-        assert(ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, inst.operands + 0, inst_address, &abs_addr)));
+        if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&inst, inst.operands + 0, inst_address, &abs_addr))) {
+            throw TransassemblingException("Absolute address (relative offset) calculation failed.", inst, inst_address);
+        }
         break;
 
     default:

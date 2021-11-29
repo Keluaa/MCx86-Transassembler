@@ -29,8 +29,8 @@ PHDRS
 MEMORY
 {
     TEXT (rx) : ORIGIN = 0x010000, LENGTH = 32k
-    ROM  (r)  : ORIGIN = 0x200000, LENGTH = 2M
-    RAM  (aw) : ORIGIN = 0x400000, LENGTH = 4M
+    ROM  (r)  : ORIGIN = 0x200000, LENGTH = 1M
+    RAM  (aw) : ORIGIN = 0x400000, LENGTH = 1M
 }
 
 
@@ -83,7 +83,7 @@ SECTIONS
       :seg_data
 
     data_size = SIZEOF(.data) + SIZEOF(.bss);
-    
+
     /DISCARD/ : {           /* Discarded sections */
         *(.note.gnu.build-id) /* Discarding this section produces a warning, but we don't care */
         *(.comment)

@@ -33,7 +33,7 @@ bool load_opcodes_mapping(const std::string& opcodes_mapping_file)
         }
     }
     opcodes_file.close();
-    
+
     std::cout << "Loaded the opcodes map\n";
 
     return false;
@@ -61,14 +61,14 @@ bool load_mapping(const std::string& mapping_file_name)
     }
 
     mapping_file.close();
-    
+
     std::cout << "Loaded the instructions extraction infos\n";
 
     return false;
 }
 
 
-void write_memory_map(const std::string& file_name, ELFIO::Elf32_Addr entry_point, uint32_t instructions_count)
+void write_memory_map(const std::string& file_name, ELFIO::Elf32_Addr entry_point, uint32_t instructions_count, uint32_t raw_rom_size, uint32_t raw_ram_size)
 {
     // See the custom linker script (linking.ld) for the custom memory layout
     const ELFIO::Elf32_Addr text_start = 0x010000;
@@ -85,8 +85,10 @@ void write_memory_map(const std::string& file_name, ELFIO::Elf32_Addr entry_poin
     memory_map_file << entry_point << "\n";
     memory_map_file << text_start << "\n";
     memory_map_file << text_start + instructions_count << "\n";
-    memory_map_file << rom_start;
-    memory_map_file << ram_start;
+    memory_map_file << rom_start << "\n";
+    memory_map_file << ram_start << "\n";
+    memory_map_file << raw_rom_size << "\n";
+    memory_map_file << raw_ram_size << "\n";
 
     memory_map_file.close();
 }
@@ -105,8 +107,7 @@ void write_memory_contents(const std::string& file_name, const ELFIO::segment* d
     }
 
     const char* data = data_segment->get_data();
-    std::streamsize pos = 0;
-    std::streamsize size = std::streamsize(data_segment->get_file_size());
+    std::streamsize pos = 0, size = std::streamsize(data_segment->get_file_size());
 
     while (pos < size) {
         memory_file.sputn(data, std::min(CHUNK_SIZE, size - pos));
@@ -117,6 +118,36 @@ void write_memory_contents(const std::string& file_name, const ELFIO::segment* d
     }
 
     memory_file.close();
+}
+
+
+std::pair<uint32_t, uint32_t> get_data_sizes(ELFIO::elfio& elf_reader)
+{
+    ELFIO::section* symbol_table_section = elf_reader.sections[".symtab"];
+    ELFIO::symbol_section_accessor symbol_table(elf_reader, symbol_table_section);
+
+    auto get_symbol_value = [symbol_table](const std::string& name) {
+        ELFIO::Elf64_Addr value;
+        ELFIO::Elf_Xword size;
+        unsigned char bind;
+        unsigned char type;
+        ELFIO::Elf_Half section_index;
+        unsigned char other;
+
+        symbol_table.get_symbol(name, value, size, bind, type, section_index, other);
+
+        return value;
+    };
+
+    ELFIO::Elf64_Addr rodata_start = get_symbol_value("rodata_start");
+    ELFIO::Elf64_Addr rodata_end = get_symbol_value("rodata_end");
+    ELFIO::Elf64_Addr data_start = get_symbol_value("data_start");
+    ELFIO::Elf64_Addr data_end = get_symbol_value("data_end");
+
+    uint32_t rodata_raw_size = rodata_end - rodata_start;
+    uint32_t data_raw_size = data_end - data_start;
+
+    return std::make_pair(rodata_raw_size, data_raw_size);
 }
 
 
@@ -131,6 +162,11 @@ bool transassemble_elf(const std::string& elf_file)
         return true;
     }
 
+    auto [raw_rom_size, raw_ram_size] = get_data_sizes(elf_reader);
+
+    std::cout << "Raw ROM size: " << raw_rom_size << " bytes.\n";
+    std::cout << "Raw RAM size: " << raw_ram_size << " bytes.\n";
+
     std::cout << "Transassembling '" << elf_file << "'...\n";
 
     // Get the section containing labels (addresses) to instructions
@@ -143,7 +179,13 @@ bool transassemble_elf(const std::string& elf_file)
     Transassembler transassembler((const uint8_t*) segment->get_data(), segment->get_file_size(), segment->get_virtual_address());
 
     std::cout << "Processing jumps..." << std::endl;
-    transassembler.process_jumping_instructions();
+    try {
+        transassembler.process_jumping_instructions();
+    }
+    catch (const TransassemblingException& exception) {
+        std::cout << "Could not process jumps.\n" << exception.what();
+        return true;
+    }
 
     if (labels_section != nullptr) {
         // I am too lazy to create a new data array and set it, so const_cast it is
@@ -163,7 +205,7 @@ bool transassemble_elf(const std::string& elf_file)
     }
 
     std::cout << "Converting instructions..." << std::endl;
-    
+
     try {
     	transassembler.convert_instructions(mapping, instructions_file);
 	}
@@ -171,12 +213,12 @@ bool transassemble_elf(const std::string& elf_file)
 		std::cout << "Conversion error: \n" << e.what() << "\n";
 		return true;
 	}
-	
+
     instructions_file.close();
 	
     std::cout << "Successfully transassembled the elf file." << std::endl;
 
-    write_memory_map("memory_map.txt", elf_reader.get_entry(), transassembler.get_instructions_count());
+    write_memory_map("memory_map.txt", elf_reader.get_entry(), transassembler.get_instructions_count(), raw_rom_size, raw_ram_size);
 
     write_memory_contents("memory_data.bin", elf_reader.segments[2]);
 

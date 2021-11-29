@@ -10,8 +10,14 @@
     )
 
 
+int calls = 0x145351;
+const int ref = 0x15654;
+
+
 int fib(int n)
 {
+    calls++;
+
     int a = 1;
     int b = 1;
 
@@ -51,5 +57,5 @@ int test_switch(int a, int b)
 int main()
 {
     //return fib(13);
-    return test_switch(fib(2), fib(7));
+    return ref + test_switch(fib(2), fib(7)) + calls;
 }

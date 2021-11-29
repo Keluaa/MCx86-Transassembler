@@ -188,8 +188,13 @@ class IA32::LoadingException : public std::exception
 {
 public:
 	template<typename... Args>
-    LoadingException(const char* format, Args... args)
+    explicit LoadingException(const char* format, Args... args)
     {
+        if (sizeof...(args) == 0) {
+            message = format;
+            return;
+        }
+
         int length = snprintf(nullptr, 0, format, args...);
         if (length < 0) {
             message = format;
@@ -202,7 +207,7 @@ public:
         message = buffer;
         delete[] buffer;
     }
-    
+
     [[nodiscard]] const char* what() const noexcept override
     {
         return message.c_str();
