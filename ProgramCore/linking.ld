@@ -89,3 +89,4 @@ SECTIONS
         *(.comment)
     }
 }
+'

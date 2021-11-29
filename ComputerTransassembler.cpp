@@ -17,7 +17,7 @@ bool load_opcodes_mapping(const std::string& opcodes_mapping_file)
 {
     std::fstream opcodes_file;
     opcodes_file.open(opcodes_mapping_file, std::ios::in);
-    if (!opcodes_file.is_open()) {
+    if (!opcodes_file) {
         std::cerr << "Cannot open the opcodes file: " << opcodes_mapping_file << std::endl;
         return true;
     }
@@ -33,6 +33,8 @@ bool load_opcodes_mapping(const std::string& opcodes_mapping_file)
         }
     }
     opcodes_file.close();
+    
+    std::cout << "Loaded the opcodes map\n";
 
     return false;
 }
@@ -42,7 +44,7 @@ bool load_mapping(const std::string& mapping_file_name)
 {
     std::fstream mapping_file;
     mapping_file.open(mapping_file_name, std::ios::in);
-    if (!mapping_file.is_open()) {
+    if (!mapping_file) {
         std::cerr << "Cannot open the mapping file: " << mapping_file_name << std::endl;
         return true;
     }
@@ -55,10 +57,12 @@ bool load_mapping(const std::string& mapping_file_name)
     }
     catch (const std::exception& e) {
         std::cerr << "Error while loading the mapping file: \n" << e.what() << "\n";
-        return false;
+        return true;
     }
 
     mapping_file.close();
+    
+    std::cout << "Loaded the instructions extraction infos\n";
 
     return false;
 }
@@ -116,7 +120,7 @@ void write_memory_contents(const std::string& file_name, const ELFIO::segment* d
 }
 
 
-int transassemble_elf(const std::string& elf_file)
+bool transassemble_elf(const std::string& elf_file)
 {
     const std::string instructions_file_name = "instructions.bin";
 
@@ -124,7 +128,7 @@ int transassemble_elf(const std::string& elf_file)
 
     if (!elf_reader.load(elf_file)) {
         std::cerr << "Could not open the elf file: " << elf_file << std::endl;
-        return 1;
+        return true;
     }
 
     std::cout << "Transassembling '" << elf_file << "'...\n";
@@ -155,12 +159,19 @@ int transassemble_elf(const std::string& elf_file)
     std::filebuf instructions_file;
     if (!instructions_file.open(instructions_file_name, std::ios::out | std::ios::binary)) {
         std::cout << "Could not open the instructions file: '" << instructions_file_name << "'" << std::endl;
-        return 1;
+        return true;
     }
 
     std::cout << "Converting instructions..." << std::endl;
-    transassembler.convert_instructions(mapping, instructions_file);
-
+    
+    try {
+    	transassembler.convert_instructions(mapping, instructions_file);
+	}
+	catch (const IA32::ConversionException& e) {
+		std::cout << "Conversion error: \n" << e.what() << "\n";
+		return true;
+	}
+	
     instructions_file.close();
 	
     std::cout << "Successfully transassembled the elf file." << std::endl;
@@ -169,7 +180,7 @@ int transassemble_elf(const std::string& elf_file)
 
     write_memory_contents("memory_data.bin", elf_reader.segments[2]);
 
-    return 0;
+    return false;
 }
 
 
@@ -179,17 +190,17 @@ int main()
     const std::string mapping_file_name = "./IA32_instructions_mapping.csv";
     const std::string opcodes_mapping_file_name = "./computer_instructions.csv";
 
-    if (!load_opcodes_mapping(opcodes_mapping_file_name)) {
+    if (load_opcodes_mapping(opcodes_mapping_file_name)) {
         return 1;
     }
 
-    if (!load_mapping(mapping_file_name)) {
+    if (load_mapping(mapping_file_name)) {
         return 1;
     }
 
     ZydisFormatterInit(&formatter, ZYDIS_FORMATTER_STYLE_INTEL);
 
-    if (!transassemble_elf(elf_file)) {
+    if (transassemble_elf(elf_file)) {
         return 1;
     }
 

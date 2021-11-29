@@ -1,4 +1,5 @@
-
+﻿
+#include <array>
 #include <forward_list>
 #include "../IA32Mapping.h"
 
@@ -43,7 +44,7 @@ void init()
     mapping_file_stream.close();
 
     // x86 with 32-bit addressing
-    ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LEGACY_32, ZYDIS_ADDRESS_WIDTH_32);
+    ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LEGACY_32, ZYDIS_STACK_WIDTH_32);
 
     INFO("Mappings loaded.");
 

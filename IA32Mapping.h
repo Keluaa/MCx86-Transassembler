@@ -1,4 +1,4 @@
-
+﻿
 #ifndef IA32MAPPING_H
 #define IA32MAPPING_H
 
@@ -187,27 +187,22 @@ private:
 class IA32::LoadingException : public std::exception
 {
 public:
-    template<typename... Args>
-    explicit LoadingException(const std::string& msg, Args... args) noexcept
+	template<typename... Args>
+    LoadingException(const char* format, Args... args)
     {
-        if (sizeof...(args) == 0) {
-            message = msg;
-            return;
-        }
-
-        int length = snprintf(nullptr, 0, msg.c_str(), args...);
+        int length = snprintf(nullptr, 0, format, args...);
         if (length < 0) {
-            message = msg;
+            message = format;
             return;
         }
 
         char* buffer = new char[length + 1];
-        snprintf(buffer, length + 1, msg.c_str(), args...);
+        snprintf(buffer, length + 1, format, args...);
 
         message = buffer;
         delete[] buffer;
     }
-
+    
     [[nodiscard]] const char* what() const noexcept override
     {
         return message.c_str();

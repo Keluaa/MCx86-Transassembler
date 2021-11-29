@@ -1,4 +1,4 @@
-
+﻿
 #include <cstdarg>
 #include <stdexcept>
 #include <sstream>
@@ -105,12 +105,14 @@ bool ComputerOpcodesInfo::load_map(std::fstream& opcodes_file)
     bool get_flags;
     bool get_control_registers;
 
+    int i = 1;
+    
     while (opcodes_file.good()) {
         opcodes_file.get(mnemonic, 7, ',');
         opcodes_file.ignore(1); // skip the comma
 
         if (opcodes_file.eof()) {
-            break;
+            return false; // The two previous read will fail if there is an empty last line
         }
 
         opcodes_file.getline(line, 50);

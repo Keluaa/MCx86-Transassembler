@@ -9,7 +9,7 @@ Transassembler::Transassembler(const uint8_t* data, const size_t size, const uin
     : data(data), size(size), segment_address(addr), decoder()
 {
     // x86 with 32-bit addressing
-    ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LEGACY_32, ZYDIS_ADDRESS_WIDTH_32);
+    ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LEGACY_32, ZYDIS_STACK_WIDTH_32);
 }
 
 

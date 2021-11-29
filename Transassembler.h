@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <Zydis/Zydis.h>
+#include <elfio.hpp>
 #include <elfio_utils.hpp>
 
 #include "Instruction.h"

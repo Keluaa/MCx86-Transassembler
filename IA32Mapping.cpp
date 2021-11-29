@@ -1,4 +1,4 @@
-
+﻿
 #include <cstring>
 #include <charconv>
 #include <array>
@@ -50,8 +50,8 @@ int scan_optional_format(const std::string& str, const char* format, const std::
             case '\0':
             default:
                 // Wrong format
-                return -1;
-
+            	throw IA32::LoadingException("Wrong format: '%%%c'", *(format - 1));
+                
             case 'b': // boolean
                 if (*status.ptr == *format) {
                     // The next character in the string is the character after %b -> skip this argument
@@ -61,7 +61,8 @@ int scan_optional_format(const std::string& str, const char* format, const std::
                 status = std::from_chars(status.ptr, str_end, value);
                 if (status.ec != std::errc()) {
                     // Conversion error
-                    return -1;
+                    std::error_code ec = std::make_error_code(status.ec);
+                   throw IA32::LoadingException("Conversion error for %%b: %s", ec.message().c_str());
                 }
                 *std::any_cast<bool*>(args.at(args_index)) = (bool) value;
                 break;
@@ -75,7 +76,8 @@ int scan_optional_format(const std::string& str, const char* format, const std::
                 status = std::from_chars(status.ptr, str_end, value);
                 if (status.ec != std::errc()) {
                     // Conversion error
-                    return -1;
+                    std::error_code ec = std::make_error_code(status.ec);
+                    throw IA32::LoadingException("Conversion error for %%d: %s", ec.message().c_str());
                 }
                 *std::any_cast<uint32_t*>(args.at(args_index)) = value;
                 break;
@@ -89,7 +91,8 @@ int scan_optional_format(const std::string& str, const char* format, const std::
                 status = std::from_chars(status.ptr, str_end, value, 16);
                 if (status.ec != std::errc()) {
                     // Conversion error
-                    return -1;
+                    std::error_code ec = std::make_error_code(status.ec);
+                    throw IA32::LoadingException("Conversion error for %%x: %s", ec.message().c_str());
                 }
                 *std::any_cast<uint32_t*>(args.at(args_index)) = value;
                 break;
@@ -103,7 +106,8 @@ int scan_optional_format(const std::string& str, const char* format, const std::
                 status = std::from_chars(status.ptr, str_end, value, 2);
                 if (status.ec != std::errc()) {
                     // Conversion error
-                    return -1;
+                    std::error_code ec = std::make_error_code(status.ec);
+                    throw IA32::LoadingException("Conversion error for %%o: %s", ec.message().c_str());
                 }
                 *std::any_cast<uint32_t*>(args.at(args_index)) = value;
                 break;
@@ -115,7 +119,8 @@ int scan_optional_format(const std::string& str, const char* format, const std::
                 const char* string_end = string_start;
                 const char next_format_char = *format;
                 if (next_format_char == '%') {
-                    return -1; // malformed format
+                    // Malformed format
+                    throw IA32::LoadingException("Malformed format for %%s");
                 }
 
                 while (*string_end != '\0' && *string_end != next_format_char) { string_end++; }
@@ -132,13 +137,18 @@ int scan_optional_format(const std::string& str, const char* format, const std::
         else {
             // Try to match the character
             if (*status.ptr++ != format_c) {
-                return -1;
+            	throw IA32::LoadingException("The string doesn't match the character '%c' at pos %d", format_c, status.ptr - 1 - str.c_str());
             }
         }
     }
 
     // The last 'status.ptr' value should point to the character before the '\0'
-    return int((status.ptr + 1) - str_end);
+    if (status.ptr - str_end != 0) {
+    	std::string parsed(str, int(status.ptr - str_end));
+    	throw IA32::LoadingException("The last string pos isn't at the end of the string:\nStopped at:\t'%s' (%d)\nComplete str:\t'%s' (%d)", parsed.c_str(), int(status.ptr - str.c_str()), str.c_str(), int(str_end - str.c_str()));
+    }
+    
+    return 0;
 }
 
 
@@ -158,7 +168,7 @@ static constexpr uint64_t chars_to_int(const char* str)
 }
 
 
-static constexpr IA32::Operand explicit_register_from_name(const char* name)
+static IA32::Operand explicit_register_from_name(const char* name)
 {
     switch (chars_to_int(name)) {
     case 0:                       return IA32::Operand::None;
@@ -179,12 +189,12 @@ static constexpr IA32::Operand explicit_register_from_name(const char* name)
     case chars_to_int("B"):   return IA32::Operand::B;
 
     default:
-        throw IA32::LoadingException("Invalid register name: '%s'", name);
+    	throw IA32::LoadingException("Invalid register name: '%s'", name);
     }
 }
 
 
-static constexpr IA32::Operand operand_descriptor_from_str(const char* desc)
+static IA32::Operand operand_descriptor_from_str(const char* desc)
 {
     switch (chars_to_int(desc)) {
 
@@ -273,7 +283,7 @@ static constexpr IA32::Operand operand_descriptor_from_str(const char* desc)
     case chars_to_int("Creg"):     return IA32::Operand::Creg;
 
     default:
-        throw IA32::LoadingException("Invalid operand descriptor: '%s'", desc);
+    	throw IA32::LoadingException("Invalid operand descriptor: '%s'", desc);
     }
 }
 
