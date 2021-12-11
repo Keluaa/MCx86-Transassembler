@@ -7,9 +7,8 @@
 #include <exception>
 #include <sstream>
 
-#include <Zydis/Zydis.h>
-#include <elfio.hpp>
-#include <elfio.hpp>
+#include "Zydis/Zydis.h"
+#include "elfio/elfio.hpp"
 
 #include "Instruction.h"
 #include "IA32Mapping.h"

@@ -6,28 +6,19 @@ set(CMAKE_CXX_STANDARD 20)
 # Zydis
 option(ZYDIS_BUILD_TOOLS "" OFF)
 option(ZYDIS_BUILD_EXAMPLES "" OFF)
-add_subdirectory("dependencies/zydis")
+add_subdirectory(dependencies/zydis)
+
+# ELFIO
+add_subdirectory(dependencies/elfio)
 
 # ComputerTransassembler Lib
-add_library(ComputerTransassembler_lib
-        ComputerOpcodesInfo.h
-        ComputerOpcodesInfo.cpp
-        Instruction.h
-        IA32Mapping.h
-        IA32Mapping.cpp
-        Transassembler.h
-        Transassembler.cpp)
-
-target_link_libraries(ComputerTransassembler_lib PRIVATE "Zydis")
+add_subdirectory(transassembler)
 
 # ComputerTransassembler
 add_executable(ComputerTransassembler
         ComputerTransassembler.cpp)
 
-target_link_libraries(ComputerTransassembler PRIVATE "Zydis" ComputerTransassembler_lib)
-
-# ELFIO
-include_directories(ComputerTransassembler "dependencies/elfio/elfio")
+target_link_libraries(ComputerTransassembler PRIVATE Zydis ComputerTransassembler_lib elfio::elfio)
 
 # AssemblyPreprocessor
 add_subdirectory(assembly_preprocessor)

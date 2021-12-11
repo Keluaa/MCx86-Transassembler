@@ -1,7 +1,7 @@
 ﻿
 #include <array>
-#include "../IA32Mapping.h"
-#include "../Transassembler.h"
+#include "IA32Mapping.h"
+#include "Transassembler.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
@@ -21,8 +21,8 @@ void init()
         return;
     }
 
-    const std::string MAPPING_FILE_PATH = "./IA32_instructions_mapping.csv";
-    const std::string opcodes_mapping_file_name = "./computer_instructions.csv";
+    const std::string IA32_mapping_file_name = "./mappings/IA32_instructions_mapping.csv";
+    const std::string opcodes_mapping_file_name = "./mappings/computer_instructions.csv";
 
     std::fstream opcodes_file;
     opcodes_file.open(opcodes_mapping_file_name, std::ios::in);
@@ -35,7 +35,7 @@ void init()
     opcodes_file.close();
 
     std::fstream mapping_file_stream;
-    mapping_file_stream.open(MAPPING_FILE_PATH, std::ios::in);
+    mapping_file_stream.open(IA32_mapping_file_name, std::ios::in);
     if (!mapping_file_stream) {
         FAIL("Could not open the mapping file.");
     }

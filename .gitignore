@@ -1,6 +1,6 @@
 ﻿/cmake-build-debug/
 /build/
 /.idea/
-/instruction.S
+/instruction_encoder_utility/instruction.S
 /ProgramCore/*.s
-/instructions.bin
+/out

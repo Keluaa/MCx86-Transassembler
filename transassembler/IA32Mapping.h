@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <fstream>
 
-#include <Zydis/Zydis.h>
+#include "Zydis/Zydis.h"
 
 #include "Instruction.h"
 #include "ComputerOpcodesInfo.h"

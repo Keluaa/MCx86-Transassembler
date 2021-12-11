@@ -4,7 +4,7 @@
 #include <regex>
 
 
-/*
+/**
  * Returns true if there is labels stored (as .long data) in the given section.
  * This mainly detects lookup jump tables of switches, ex:
  *      jmp [DWORD PTR .Lookup[0x0+eax]]
@@ -52,7 +52,7 @@ bool check_for_labels_in_read_only_data(std::fstream& file)
 }
 
 
-/*
+/**
  * Moves all sections of read-only data containing labels to instructions into a special section '.labels'.
  * When processing the resulting elf file, this '.labels' section will have its values changed to the new instruction
  * positions.

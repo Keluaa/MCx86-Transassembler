@@ -2,9 +2,9 @@
 #include <iostream>
 
 #include <Zydis/Zydis.h>
-#include <elfio.hpp>
+#include <elfio/elfio.hpp>
 
-#include "Transassembler.h"
+#include "transassembler/Transassembler.h"
 
 
 static ZydisFormatter formatter;
@@ -150,9 +150,11 @@ std::pair<uint32_t, uint32_t> get_data_sizes(ELFIO::elfio& elf_reader)
 }
 
 
-bool transassemble_elf(const std::string& elf_file)
+bool transassemble_elf(const std::string& elf_file, const std::string& out_folder)
 {
-    const std::string instructions_file_name = "instructions.bin";
+    const std::string instructions_file_name = out_folder + "/instructions.bin";
+    const std::string memory_map_file_name = out_folder + "/memory_map.txt";
+    const std::string memory_data_file_name = out_folder + "/memory_data.bin";
 
     ELFIO::elfio elf_reader;
 
@@ -217,9 +219,8 @@ bool transassemble_elf(const std::string& elf_file)
 	
     std::cout << "Successfully transassembled the elf file." << std::endl;
 
-    write_memory_map("memory_map.txt", elf_reader.get_entry(), transassembler.get_instructions_count(), raw_rom_size, raw_ram_size);
-
-    write_memory_contents("memory_data.bin", elf_reader.segments[2]);
+    write_memory_map(memory_map_file_name, elf_reader.get_entry(), transassembler.get_instructions_count(), raw_rom_size, raw_ram_size);
+    write_memory_contents(memory_data_file_name, elf_reader.segments[2]);
 
     return false;
 }
@@ -228,8 +229,9 @@ bool transassemble_elf(const std::string& elf_file)
 int main()
 {
     const std::string elf_file = "./ProgramCore/Program_core.exe";
-    const std::string mapping_file_name = "./IA32_instructions_mapping.csv";
-    const std::string opcodes_mapping_file_name = "./computer_instructions.csv";
+    const std::string mapping_file_name = "./mappings/IA32_instructions_mapping.csv";
+    const std::string opcodes_mapping_file_name = "./mappings/computer_instructions.csv";
+    const std::string out_folder = "./out";
 
     if (load_opcodes_mapping(opcodes_mapping_file_name)) {
         return 1;
@@ -241,7 +243,7 @@ int main()
 
     ZydisFormatterInit(&formatter, ZYDIS_FORMATTER_STYLE_INTEL);
 
-    if (transassemble_elf(elf_file)) {
+    if (transassemble_elf(elf_file, out_folder)) {
         return 1;
     }
 
