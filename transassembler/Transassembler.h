@@ -14,64 +14,47 @@
 #include "IA32Mapping.h"
 
 
-class Transassembler {
+class Transassembler
+{
+    bool is_instruction_a_jump() const;
+    bool does_instruction_branches() const;
+    ZyanUSize get_jump_address(ZyanUSize inst_address) const;
+
+    Register scale_register(uint8_t index) const;
+    Register scale_register(uint8_t index, bool size_override, bool byte_size_override) const;
+    Register operand_to_register(IA32::Operand register_operand) const;
+    uint32_t operand_to_immediate(IA32::Operand immediate_operand, const ZydisDecodedOperand& operand) const;
+
+    void extract_mod_rm_sib_bytes();
+    void convert_operand(const IA32::Inst& extract_data, uint8_t op_index);
+    void post_conversion();
 
 public:
-
-    static bool is_instruction_a_jump(const ZydisDecodedInstruction& inst);
-    static bool does_instruction_branches(const ZydisDecodedInstruction& inst);
-
-    static ZyanUSize get_jump_address(const ZydisDecodedInstruction& inst, const ZyanUSize inst_address);
-
-    static Register scale_register(uint8_t index, bool operand_size_override, bool operand_byte_size_override,
-                                   const uint32_t virtual_address);
-
-    static Register operand_to_register(IA32::Operand register_operand,
-                                        bool operand_size_override, bool operand_byte_size_override,
-                                        const uint32_t virtual_address);
-
-    static uint32_t operand_to_immediate(IA32::Operand immediate_operand, const ZydisDecodedOperand& operand,
-                                         const uint32_t virtual_address);
-
-    static void convert_operand(const ZydisDecodedInstruction& IA32inst, const IA32::Inst& extract_data, Instruction& inst,
-                                uint32_t virtual_address, uint32_t segment_base_address,
-                                uint8_t op_index, const IA32::Operand& inst_operand, Instruction::Operand& op,
-                                bool rm_is_register_operand, uint8_t rm_index, uint8_t sib_scale);
-
-    static void post_conversion(const ZydisDecodedInstruction& IA32inst, Instruction& inst);
-
-    static void extract_mod_rm_sib_bytes(const ZydisDecodedInstruction& IA32inst, Instruction& inst,
-                                         bool& rm_is_register_operand, uint8_t& register_index, uint8_t& sib_scale);
-
     Transassembler(const IA32::Mapping* mapping, const uint8_t* data, const size_t size, const uint64_t addr);
 
     void process_jumping_instructions();
-
-    void convert_instruction(const ZydisDecodedInstruction& IA32inst, Instruction& inst,
-                             uint32_t virtual_address, uint32_t segment_base_address) const;
-
-    /**
-     * Parses through all instructions, decodes them, converts them, and writes the new instruction to the file as raw
-     * binary.
-     *
-     * Jumping instructions have their target corrected using the jump target map built from process_jumping_instructions().
-     */
-    void convert_instructions(std::filebuf& out_file);
-
-    /**
-     * Converts the contents of the labels section, where all pointer lookup tables to other instructions are stored,
-     * using the map for all instruction positions.
-     */
     void update_labels_section(const ELFIO::endianess_convertor& conv, uint8_t* data, size_t labels_size);
 
-    /**
-     * Prints instructions with their address, number and jump numbers.
-     */
+    void convert_instruction(const ZydisDecodedInstruction& IA32inst, Instruction& inst,
+                             uint32_t inst_virtual_address, uint32_t segment_base_address);
+
+    void convert_instructions(std::filebuf& out_file);
+
     void print_disassembly(const ZydisFormatter& formatter) const;
 
     uint32_t get_instructions_count() const { return instructions_numbers.size(); }
 
 private:
+    // Fields used by 'convert_instruction' while converting an instruction
+    const ZydisDecodedInstruction* IA32_inst = nullptr;
+    Instruction* MCID32_inst = nullptr;
+    uint32_t segment_base_address = 0;
+    ZyanUSize virtual_address = 0;
+    bool operand_size_override = false;
+    bool operand_byte_size_override = false;
+    bool rm_is_register_operand = false;
+    uint8_t register_index = 0;
+    uint8_t sib_scale = 0;
 
     /**
      * Mapping from IA32 instructions to features of our instructions
