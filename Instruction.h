@@ -60,17 +60,13 @@ enum class Register : uint8_t {
  * memory usage, but by design this is not a problem. The only downside is that the executable files are
  * bigger.
  *
- * Total size: 112 bits used, but 128 bits in memory
+ * Total size: 107 bits used.
  */
 struct Instruction {
 
     uint8_t opcode;
 
-    // TODO : maybe store some of the bits required for computing the address in the register bits of the operand which
-    //  has the type MEM, like reg and scale (scale is NOT the size of the register!) -> yeah do that yeah good idea
-
-    /// Struct describing an operand, present in order for IA32::Mapping::convert_operand to exist.
-    /// An additional field for 'write' would have been great but the struct is already 8 bits long.
+    // Struct describing an operand, present in order for IA32::Mapping::convert_operand to exist.
     struct Operand {
         OpType type : 2;
         Register reg : 5;
@@ -98,20 +94,50 @@ struct Instruction {
     bool scale_output_override : 1;
     Register register_out : 5;
 
-    // Addressing
-    // An effective address needs to be computed if any of reg_present, base_present or displacement_present is true
-    // Formula for the address: [reg*(scale) + base] + disp, if any is not present, it is replaced by zero
-    bool reg_present : 1;   // If 'reg' contains a register index
-    uint8_t reg : 3;        // Register used as an index to the memory
-    uint8_t scale : 2;      // Scale of the register index ('0b00' -> 1, '0b01' -> 2, '0b10' -> 4, '0b11' -> 8)
-    bool base_present : 1;  // If 'base_reg' contains a register index
-    uint8_t base_reg : 3;   // Register used as a base to the memory
-    uint8_t displacement_present : 1; // The displacement is stored in the address_value field
+    /*
+        Addressing
 
-    uint8_t : 0; // alignment (16 bits)
+    In IA-32, the following addressing modes are possible (in 32 bit addressing):
+      mod r/m index  base               effective address
+      11  ...                                    base reg
+      00  101                                               displacement
+      00  ...                                    base reg
+      ..  ...                                    base reg + displacement
+      ..  100  100   ...                         base reg + displacement
+      ..  100  ...   ...    scaled reg * scale + base reg + displacement
+      00  100  ...   101    scaled reg * scale +          + displacement
+      ..  100  ...   101    scaled reg * scale +   EBP    + displacement
 
-    // both of those values can be used as general purpose values in special instructions (bound, call...)
-    uint32_t address_value;
+    The base register is always a 32 bit register index, unless Mod = 11, in which case it is an operand and so scaled
+    according to the operand size overrides.
+    The scaled register is always a 32 bit register index.
+    Displacement is a signed value of either 8 bits or 32 bits.
+    The scale is encoded in 2 bits as follows: '0b00' -> 1, '0b01' -> 2, '0b10' -> 4, '0b11' -> 8
+
+    Here we encode those addressing modes this way:
+      - base reg     : stored as a register index in the 3 low bits of the 'reg' field of the operand of type memory
+      - scaled reg   : stored explicitly in the 'scaled_reg' field
+      - scale        : stored in the high 2 bits of the 'reg' field of the operand of type memory
+      - displacement : stored as a 32 bit value. 8 bit displacements are sign-extended to 32 bit.
+
+    Then to compute the address, the following flags are used to indicate the presence of a field :
+      - base_reg_present   : if the 'reg' field of the memory operand has a register index
+      - scaled_reg_present : if the 'scaled_reg' field has a register index
+
+    If 'compute_address' is true, then it is computed according to the following formula. Any absent field is replaced
+    by zero.
+                base_reg + scaled_reg * scale + displacement
+
+    If 'compute_address' is false, then only the base register is loaded.
+     */
+    bool compute_address : 1;
+    bool base_reg_present : 1;
+    bool scaled_reg_present : 1;
+    uint8_t scaled_reg : 3;
+
+    uint8_t : 0;
+
+    uint32_t address_value; // Holds an address displacement value or an immediate constant address
     uint32_t immediate_value;
 
     // The Operand struct by itself cannot describe when it is not used, here is how to do it for both operands:

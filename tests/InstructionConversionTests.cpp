@@ -1,7 +1,7 @@
 ﻿
 #include <array>
-#include <forward_list>
 #include "../IA32Mapping.h"
+#include "../Transassembler.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
@@ -10,6 +10,7 @@
 static ZydisDecoder decoder;
 static ComputerOpcodesInfo opcodes_info;
 static IA32::Mapping mapping;
+static Transassembler* transassembler;
 
 
 void init()
@@ -25,21 +26,21 @@ void init()
 
     std::fstream opcodes_file;
     opcodes_file.open(opcodes_mapping_file_name, std::ios::in);
-    if (!opcodes_file.is_open()) {
+    if (!opcodes_file) {
         FAIL("Could not open the opcodes mapping file.");
     }
-    else if (!opcodes_info.load_map(opcodes_file)) {
+    else if (opcodes_info.load_map(opcodes_file)) {
         FAIL("Error when parsing the opcodes mapping file.");
     }
     opcodes_file.close();
 
     std::fstream mapping_file_stream;
     mapping_file_stream.open(MAPPING_FILE_PATH, std::ios::in);
-    if (!mapping_file_stream.is_open()) {
+    if (!mapping_file_stream) {
         FAIL("Could not open the mapping file.");
     }
-    else {
-        REQUIRE_NOTHROW(mapping.load_instructions_extract_info(mapping_file_stream, opcodes_info));
+    else if (mapping.load_instructions_extract_info(mapping_file_stream, opcodes_info)) {
+        FAIL("Error while loading the mapping file.");
     }
     mapping_file_stream.close();
 
@@ -47,6 +48,8 @@ void init()
     ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LEGACY_32, ZYDIS_STACK_WIDTH_32);
 
     INFO("Mappings loaded.");
+
+    transassembler = new Transassembler(&mapping, nullptr, 0, 0x80000);
 
     initialized = true;
 }
@@ -77,12 +80,10 @@ void find_instructions_differences(const Instruction& generated, const Instructi
     CHECK_EQ(generated.scale_output_override, expected.scale_output_override);
     CHECK_EQ(generated.register_out, expected.register_out);
 
-    CHECK_EQ(generated.reg_present, expected.reg_present);
-    CHECK_EQ(generated.reg, expected.reg);
-    CHECK_EQ(generated.scale, expected.scale);
-    CHECK_EQ(generated.base_present, expected.base_present);
-    CHECK_EQ(generated.base_reg, expected.base_reg);
-    CHECK_EQ(generated.displacement_present, expected.displacement_present);
+    CHECK_EQ(generated.compute_address, expected.compute_address);
+    CHECK_EQ(generated.scaled_reg_present, expected.scaled_reg_present);
+    CHECK_EQ(generated.scaled_reg, expected.scaled_reg);
+    CHECK_EQ(generated.base_reg_present, expected.base_reg_present);
 
     CHECK_EQ(generated.address_value, expected.address_value);
     CHECK_EQ(generated.immediate_value, expected.immediate_value);
@@ -96,7 +97,7 @@ void test_instruction_conversion(const uint8_t* encoded_IA32_inst, size_t encode
 
     Instruction inst{};
 
-    REQUIRE_NOTHROW(mapping.convert_instruction(IA32_inst, inst, 0x80000, 0x80000));
+    REQUIRE_NOTHROW(transassembler->convert_instruction(IA32_inst, inst, 0x80000, 0x80000));
 
     if (inst != expected_result) {
         find_instructions_differences(inst, expected_result);
@@ -148,7 +149,18 @@ struct TestInfo {
 };
 
 
-static const std::array<TestInfo, 10> instructions_test_cases{
+/**
+ * Encodes the scale for the scaled register in a 'reg' field.
+ * Optionally adds the index to a register.
+ */
+constexpr Register encode_scale_reg(uint8_t scale, Register reg = Register::EAX)
+{
+    uint8_t reg_index = static_cast<uint8_t>(reg) & 0b111;
+    return static_cast<Register>(reg_index | (scale << 3));
+}
+
+
+static const std::array<TestInfo, 11> instructions_test_cases{
     TestInfo{
         "AAA", { /* AAA */ 0x37 }, {
             .opcode = 0,
@@ -193,8 +205,9 @@ static const std::array<TestInfo, 10> instructions_test_cases{
             .operand_byte_size_override = true,
             .get_flags = true,
             .write_ret1_to_op1 = true,
-            .reg_present = true,
-            .reg = uint8_t(Register::EAX),
+            .compute_address = true,
+            .scaled_reg_present = true,
+            .scaled_reg = uint8_t(Register::EAX),
             .immediate_value = 42
         },
     }, TestInfo{
@@ -204,8 +217,9 @@ static const std::array<TestInfo, 10> instructions_test_cases{
             .op2 = { .type = OpType::IMM, .read = true },
             .get_flags = true,
             .write_ret1_to_op1 = true,
-            .reg_present = true,
-            .reg = uint8_t(Register::EAX),
+            .compute_address = true,
+            .scaled_reg_present = true,
+            .scaled_reg = uint8_t(Register::EAX),
             .immediate_value = 4242
         },
     }, TestInfo{
@@ -227,16 +241,14 @@ static const std::array<TestInfo, 10> instructions_test_cases{
     }, TestInfo{
         "MOV_r/m_sib", { /* MOV BYTE PTR [eax+ecx*8], 42 */ 0xC6, 0x04, 0xC8, 0x2A }, {
             .opcode = 32,
-            .op1 = { .type = OpType::MEM, .read = false },
+            .op1 = { .type = OpType::MEM, .reg = encode_scale_reg(0b11, Register::EAX), .read = false },
             .op2 = { .type = OpType::IMM, .read = true },
             .operand_byte_size_override = true,
             .write_ret1_to_op1 = true,
-            .reg_present = true,
-            .reg = uint8_t(Register::ECX),
-            .scale = 0b11,
-            .base_present = true,
-            .base_reg = uint8_t(Register::EAX),
-            .displacement_present = false,
+            .compute_address = true,
+            .base_reg_present = true,
+            .scaled_reg_present = true,
+            .scaled_reg = uint8_t(Register::ECX),
             .immediate_value = 42
         }
     },
@@ -248,14 +260,26 @@ static const std::array<TestInfo, 10> instructions_test_cases{
     TestInfo{
         "JMP_r/m_sib", { /* JMP DWORD PTR [eax*4+0x8000042] */ 0xFF, 0x24, 0x85, 0x42, 0x00, 0x00, 0x08 }, {
             .opcode = 196,
-            .op1 = { .type = OpType::MEM, .read = true },
-            .op2 = { .type = OpType::IMM_MEM, .read = true },
-            .reg_present = true,
-            .reg = uint8_t(Register::EAX),
-            .scale = 0b10,
-            .base_present = false,
-            .displacement_present = true,
+            .op1 = { .type = OpType::MEM, .reg = encode_scale_reg(0b10), .read = true },
+            .compute_address = true,
+            .base_reg_present = false,
+            .scaled_reg_present = true,
+            .scaled_reg = uint8_t(Register::EAX),
             .address_value = 0x8000000 | 0x42
+        }
+    },
+
+    TestInfo{
+        "LEA", { /* LEA ECX, [ESP+0x4] */ 0x8D, 0x4C, 0x24, 0x04 }, {
+            .opcode = 31,
+            .op1 = { .type = OpType::REG, .reg = Register::ECX, .read = false },
+            .op2 = { .type = OpType::MEM, .reg = Register::ESP, .read = true },
+            .write_ret1_to_op1 = true,
+            .compute_address = true,
+            .base_reg_present = true,
+            .scaled_reg_present = true,
+            .scaled_reg = uint8_t(Register::ESP),
+            .address_value = 0x4,
         }
     },
 };

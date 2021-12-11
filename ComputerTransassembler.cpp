@@ -1,6 +1,5 @@
 ﻿
 #include <iostream>
-#include <filesystem>
 
 #include <Zydis/Zydis.h>
 #include <elfio.hpp>
@@ -176,7 +175,7 @@ bool transassemble_elf(const std::string& elf_file)
     // The first segment is guaranteed to be the one containing all the interesting code by the linker script
     const ELFIO::segment* segment = elf_reader.segments[0];
 
-    Transassembler transassembler((const uint8_t*) segment->get_data(), segment->get_file_size(), segment->get_virtual_address());
+    Transassembler transassembler(&mapping, (const uint8_t*) segment->get_data(), segment->get_file_size(), segment->get_virtual_address());
 
     std::cout << "Processing jumps..." << std::endl;
     try {
@@ -207,9 +206,9 @@ bool transassemble_elf(const std::string& elf_file)
     std::cout << "Converting instructions..." << std::endl;
 
     try {
-    	transassembler.convert_instructions(mapping, instructions_file);
+    	transassembler.convert_instructions(instructions_file);
 	}
-	catch (const IA32::ConversionException& e) {
+	catch (const ConversionException& e) {
 		std::cout << "Conversion error: \n" << e.what() << "\n";
 		return true;
 	}

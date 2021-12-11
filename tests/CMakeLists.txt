@@ -1,9 +1,7 @@
 
 add_executable(InstConv_Tests
-        ../IA32Mapping.cpp
-        ../ComputerOpcodesInfo.cpp
-        InstructionConvertionTests.cpp)
+        InstructionConversionTests.cpp)
 
 include_directories(InstConv_Tests "../dependencies/elfio/elfio")
 include_directories(InstConv_Tests "./")
-target_link_libraries(InstConv_Tests PRIVATE "Zydis")
+target_link_libraries(InstConv_Tests PRIVATE "Zydis" ComputerTransassembler_lib)

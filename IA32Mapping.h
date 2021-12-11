@@ -22,7 +22,6 @@ namespace IA32
 
     class Mapping;
 
-    class ConversionException;
     class LoadingException;
 }
 
@@ -164,19 +163,10 @@ class IA32::Mapping
 public:
     bool load_instructions_extract_info(std::fstream& mapping_file, const ComputerOpcodesInfo& opcodes_info);
 
-    static constexpr Register scale_register(uint8_t index,
-                                             bool operand_size_override, bool operand_byte_size_override,
-                                             const uint32_t& virtual_address);
+    bool is_opcode_known(ZyanU16 opcode) const;
+    bool has_opcode_reg_extension(ZyanU16 opcode) const;
 
-    static void convert_operand(const ZydisDecodedInstruction& IA32inst, const IA32::Inst& extract_data, Instruction& inst,
-                                uint32_t virtual_address, uint32_t segment_base_address, uint8_t op_index,
-                                const Operand& inst_operand, Instruction::Operand& op,
-                                bool rm_is_register_operand, uint8_t rm_index);
-
-    static void post_conversion(const ZydisDecodedInstruction& IA32inst, Instruction& inst);
-
-    void convert_instruction(const ZydisDecodedInstruction& IA32inst, Instruction& inst,
-                             uint32_t virtual_address, uint32_t segment_base_address) const;
+    const Inst& get_extraction_data(ZyanU16 opcode) const;
 
 private:
     std::unordered_set<uint16_t> opcodes_with_reg_extension;
@@ -203,38 +193,6 @@ public:
 
         char* buffer = new char[length + 1];
         snprintf(buffer, length + 1, format, args...);
-
-        message = buffer;
-        delete[] buffer;
-    }
-
-    [[nodiscard]] const char* what() const noexcept override
-    {
-        return message.c_str();
-    }
-
-private:
-    std::string message;
-};
-
-
-class IA32::ConversionException : public std::exception
-{
-public:
-    template<typename... Args>
-    ConversionException(uint32_t inst_address, const std::string& msg, Args... args)
-    {
-        std::string format = "At 0x%x: ";
-        format.append(msg);
-
-        int length = snprintf(nullptr, 0, format.c_str(), inst_address, args...);
-        if (length < 0) {
-            message = msg;
-            return;
-        }
-
-        char* buffer = new char[length + 1];
-        snprintf(buffer, length + 1, format.c_str(), inst_address, args...);
 
         message = buffer;
         delete[] buffer;
