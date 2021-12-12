@@ -34,12 +34,12 @@ void Transassembler::process_jumping_instructions()
     ZyanUSize offset = 0;
     uint32_t current_inst = 0;
 
-    ZydisDecodedInstruction inst;
-    IA32_inst = &inst;
     ZyanUSize jump_target;
 
     // Parse through all instructions
-    while (ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, data + offset, size - offset, &inst))) {
+    while (offset < size) {
+        decode_instruction(runtime_address, data + offset, size - offset);
+
         if (is_instruction_a_jump()) {
             jump_target = get_jump_address(runtime_address);
             if (jump_target != 0) {
@@ -61,8 +61,8 @@ void Transassembler::process_jumping_instructions()
 
         instructions_numbers[runtime_address] = current_inst;
 
-        offset += inst.length;
-        runtime_address += inst.length;
+        offset += IA32_inst.length;
+        runtime_address += IA32_inst.length;
         current_inst++;
     }
 
@@ -75,15 +75,18 @@ void Transassembler::process_jumping_instructions()
 }
 
 
-void Transassembler::print_disassembly(const ZydisFormatter& formatter) const
+void Transassembler::print_disassembly()
 {
+    ZydisFormatter formatter;
+    ZydisFormatterInit(&formatter, ZYDIS_FORMATTER_STYLE_INTEL);
+
     ZyanU64 runtime_address = segment_address;
     ZyanUSize offset = 0;
-    ZydisDecodedInstruction inst;
     uint32_t current_inst = 0;
 
-    // TODO : handle better decoding errors
-    while (ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, data + offset, size - offset, &inst))) {
+    while (offset < size) {
+        decode_instruction(runtime_address, data + offset, size - offset);
+
         // Print current inst number and address
         printf("%03d  %04lx  ", current_inst, runtime_address);
 
@@ -97,11 +100,11 @@ void Transassembler::print_disassembly(const ZydisFormatter& formatter) const
 
         // Print the decoded instruction
         char buffer[256];
-        ZydisFormatterFormatInstruction(&formatter, &inst, buffer, sizeof(buffer), runtime_address);
+        ZydisFormatterFormatInstruction(&formatter, &IA32_inst, IA32_operands, IA32_inst.operand_count, buffer, sizeof(buffer), runtime_address);
         puts(buffer);
 
-        offset += inst.length;
-        runtime_address += inst.length;
+        offset += IA32_inst.length;
+        runtime_address += IA32_inst.length;
         current_inst++;
     }
 }
@@ -109,7 +112,7 @@ void Transassembler::print_disassembly(const ZydisFormatter& formatter) const
 
 bool Transassembler::is_instruction_a_jump() const
 {
-    switch (IA32_inst->mnemonic) {
+    switch (IA32_inst.mnemonic) {
     case ZYDIS_MNEMONIC_CALL:
     //case ZYDIS_MNEMONIC_INT:  // not a jump we want to process
     //case ZYDIS_MNEMONIC_IRET: // EIP is popped from the stack
@@ -146,7 +149,7 @@ bool Transassembler::is_instruction_a_jump() const
     default:
         if (does_instruction_branches()) {
             // If this fails then there is an instruction missing in the cases above
-            throw TransassemblingException("Unhandled jumping instruction.", *IA32_inst);
+            throw TransassemblingException("Unhandled jumping instruction.", IA32_inst);
         }
         return false; // no jumps for this instruction
     }
@@ -165,25 +168,25 @@ ZyanUSize Transassembler::get_jump_address(ZyanUSize inst_address) const
 {
     ZyanUSize abs_addr = 0;
 
-    switch (IA32_inst->mnemonic) {
+    switch (IA32_inst.mnemonic) {
     case ZYDIS_MNEMONIC_CALL:
     case ZYDIS_MNEMONIC_JMP:
     {
-        const ZydisDecodedOperand& op = IA32_inst->operands[0];
+        const ZydisDecodedOperand& op = IA32_operands[0];
 
         if (op.type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
             // Relative offset
             if (!op.imm.is_relative) {
-                throw TransassemblingException("Operand should be relative.", *IA32_inst, inst_address);
+                throw TransassemblingException("Operand should be relative.", IA32_inst, inst_address);
             }
 
-            if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(IA32_inst, &op, inst_address, &abs_addr))) {
-                throw TransassemblingException("Absolute address (relative offset) calculation failed.", *IA32_inst, inst_address);
+            if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&IA32_inst, &op, inst_address, &abs_addr))) {
+                throw TransassemblingException("Absolute address (relative offset) calculation failed.", IA32_inst, inst_address);
             }
         }
         else {
             // Address in the Mod r/m. If it uses an address from a register, then we have a problem.
-            if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(IA32_inst, &op, inst_address, &abs_addr))) {
+            if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&IA32_inst, &op, inst_address, &abs_addr))) {
                 // What we don't allow : jumping to instructions outside the pre-decoded instructions area, or using
                 //      a pre-determined offset stored in the data section of the memory (ROM or RAM)
                 // What we allow : jumping using an offset table stored in ROM which has been corrected
@@ -197,7 +200,7 @@ ZyanUSize Transassembler::get_jump_address(ZyanUSize inst_address) const
                     break; // Is ok.
                 }
                 else {
-                    throw TransassemblingException("Absolute address (mod r/m) calculation failed.", *IA32_inst, inst_address);
+                    throw TransassemblingException("Absolute address (mod r/m) calculation failed.", IA32_inst, inst_address);
                 }
             }
         }
@@ -211,16 +214,16 @@ ZyanUSize Transassembler::get_jump_address(ZyanUSize inst_address) const
     case ZYDIS_MNEMONIC_LOOP:
     case ZYDIS_MNEMONIC_LOOPE:
     case ZYDIS_MNEMONIC_LOOPNE:
-        if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(IA32_inst, IA32_inst->operands + 0, inst_address, &abs_addr))) {
-            throw TransassemblingException("Absolute address (LOOP) calculation failed.", *IA32_inst, inst_address);
+        if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&IA32_inst, IA32_operands + 0, inst_address, &abs_addr))) {
+            throw TransassemblingException("Absolute address (LOOP) calculation failed.", IA32_inst, inst_address);
         }
         break;
 
     case ZYDIS_MNEMONIC_RET:
-        if (IA32_inst->operand_count == 1) {
+        if (IA32_inst.operand_count == 1) {
             // Relative offset from the immediate
-            if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(IA32_inst, IA32_inst->operands + 0, inst_address, &abs_addr))) {
-                throw TransassemblingException("Absolute address (RET) calculation failed.", *IA32_inst, inst_address);
+            if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&IA32_inst, IA32_operands + 0, inst_address, &abs_addr))) {
+                throw TransassemblingException("Absolute address (RET) calculation failed.", IA32_inst, inst_address);
             }
         }
         else {
@@ -251,8 +254,8 @@ ZyanUSize Transassembler::get_jump_address(ZyanUSize inst_address) const
     case ZYDIS_MNEMONIC_JS:
     case ZYDIS_MNEMONIC_JZ:
         // All variants use a relative offset
-        if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(IA32_inst, IA32_inst->operands + 0, inst_address, &abs_addr))) {
-            throw TransassemblingException("Absolute address (relative offset) calculation failed.", *IA32_inst, inst_address);
+        if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&IA32_inst, IA32_operands + 0, inst_address, &abs_addr))) {
+            throw TransassemblingException("Absolute address (relative offset) calculation failed.", IA32_inst, inst_address);
         }
         break;
 
@@ -266,7 +269,7 @@ ZyanUSize Transassembler::get_jump_address(ZyanUSize inst_address) const
 
 bool Transassembler::does_instruction_branches() const
 {
-    return IA32_inst->meta.branch_type != ZYDIS_BRANCH_TYPE_NONE;
+    return IA32_inst.meta.branch_type != ZYDIS_BRANCH_TYPE_NONE;
 }
 
 
@@ -303,7 +306,6 @@ void Transassembler::convert_instructions(std::filebuf& out_file)
 {
     const size_t BUFFER_SIZE = 512;
 
-    ZydisDecodedInstruction IA32_inst_;
     ZyanU64 runtime_address = segment_address;
     ZyanUSize offset = 0;
     uint32_t current_inst = 0;
@@ -313,11 +315,8 @@ void Transassembler::convert_instructions(std::filebuf& out_file)
     while (offset < size) {
         Instruction inst{};
 
-        if (!ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, data + offset, size - offset, &IA32_inst_))) {
-            throw ConversionException(runtime_address, "Instruction decoding error.");
-        }
-
-        convert_instruction(IA32_inst_, inst, runtime_address, segment_address);
+        decode_instruction(runtime_address, data + offset, size - offset);
+        convert_instruction(inst, runtime_address, segment_address);
 
         // Handle special cases
         switch (inst.opcode) {
@@ -331,8 +330,8 @@ void Transassembler::convert_instructions(std::filebuf& out_file)
             inst.address_value = segment_address + processed_jumping_instructions[current_inst];
         }
 
-        offset += IA32_inst_.length;
-        runtime_address += IA32_inst_.length;
+        offset += IA32_inst.length;
+        runtime_address += IA32_inst.length;
         current_inst++;
 
         // TODO : edit addresses pointing to the code segment
@@ -457,7 +456,7 @@ void Transassembler::convert_operand(const IA32::Inst& extract_data, uint8_t op_
 {
     using IA32::Operand;
 
-    const ZydisDecodedOperand& operand = IA32_inst->operands[op_index];
+    const ZydisDecodedOperand& operand = IA32_operands[op_index];
 
     Instruction::Operand& op = op_index == 0 ? MCID32_inst->op1 : MCID32_inst->op2;
     IA32::Operand inst_operand = op_index == 0 ? extract_data.operand_1 : extract_data.operand_2;
@@ -477,7 +476,7 @@ void Transassembler::convert_operand(const IA32::Inst& extract_data, uint8_t op_
 
     case Operand::A:
         op.type = OpType::REG;
-        switch (IA32_inst->operand_width) {
+        switch (IA32_inst.operand_width) {
         case 8:  op.reg = Register::AL;  break;
         case 16: op.reg = Register::AX;  break;
         case 32: op.reg = Register::EAX; break;
@@ -486,7 +485,7 @@ void Transassembler::convert_operand(const IA32::Inst& extract_data, uint8_t op_
 
     case Operand::C:
         op.type = OpType::REG;
-        switch (IA32_inst->operand_width) {
+        switch (IA32_inst.operand_width) {
         case 8:  op.reg = Register::CL;  break;
         case 16: op.reg = Register::CX;  break;
         case 32: op.reg = Register::ECX; break;
@@ -495,7 +494,7 @@ void Transassembler::convert_operand(const IA32::Inst& extract_data, uint8_t op_
 
     case Operand::D:
         op.type = OpType::REG;
-        switch (IA32_inst->operand_width) {
+        switch (IA32_inst.operand_width) {
         case 8:  op.reg = Register::DL;  break;
         case 16: op.reg = Register::DX;  break;
         case 32: op.reg = Register::EDX; break;
@@ -504,7 +503,7 @@ void Transassembler::convert_operand(const IA32::Inst& extract_data, uint8_t op_
 
     case Operand::B:
         op.type = OpType::REG;
-        switch (IA32_inst->operand_width) {
+        switch (IA32_inst.operand_width) {
         case 8:  op.reg = Register::BL;  break;
         case 16: op.reg = Register::BX;  break;
         case 32: op.reg = Register::EBX; break;
@@ -676,7 +675,7 @@ void Transassembler::convert_operand(const IA32::Inst& extract_data, uint8_t op_
         }
         op.type = OpType::IMM_MEM;
         // Signed offset relative to the end of the instruction
-        MCID32_inst->address_value = virtual_address + IA32_inst->length + operand.imm.value.s;
+        MCID32_inst->address_value = virtual_address + IA32_inst.length + operand.imm.value.s;
         break;
 
     case Operand::moffs:
@@ -752,9 +751,9 @@ void Transassembler::convert_operand(const IA32::Inst& extract_data, uint8_t op_
 
 void Transassembler::extract_mod_rm_sib_bytes()
 {
-    auto modrm = IA32_inst->raw.modrm;
-    auto sib = IA32_inst->raw.sib;
-    auto disp = IA32_inst->raw.disp;
+    auto modrm = IA32_inst.raw.modrm;
+    auto sib = IA32_inst.raw.sib;
+    auto disp = IA32_inst.raw.disp;
 
     if (modrm.mod == 0b11) {
         // The Mod r/m byte describes a register operand
@@ -855,7 +854,7 @@ void Transassembler::post_conversion()
             MCID32_inst->immediate_value |= 1 << 5; // Use the immediate value
         }
 
-        switch (IA32_inst->mnemonic) {
+        switch (IA32_inst.mnemonic) {
         case ZYDIS_MNEMONIC_RCL: MCID32_inst->immediate_value |= 1 << 7; // Use the carry
         case ZYDIS_MNEMONIC_ROL: MCID32_inst->immediate_value |= 1 << 6; // Rotate left
             break;
@@ -874,7 +873,7 @@ void Transassembler::post_conversion()
             MCID32_inst->immediate_value |= 1 << 5; // Use the immediate value
         }
 
-        switch (IA32_inst->mnemonic) {
+        switch (IA32_inst.mnemonic) {
         case ZYDIS_MNEMONIC_SALC: MCID32_inst->immediate_value |= 1 << 7; // Signed operation
         case ZYDIS_MNEMONIC_SHL:  MCID32_inst->immediate_value |= 1 << 6; // Rotate left
             break;
@@ -889,7 +888,7 @@ void Transassembler::post_conversion()
 
     case 44: // SETcc
         // All opcodes are merged into one, and the condition is encoded in the immediate
-        switch (IA32_inst->mnemonic) {
+        switch (IA32_inst.mnemonic) {
         case ZYDIS_MNEMONIC_SETNBE: MCID32_inst->immediate_value = 0b0000; break; // Above | Not below or equal
         case ZYDIS_MNEMONIC_SETNB:  MCID32_inst->immediate_value = 0b0001; break; // Above or equal | Not below | Not carry
         case ZYDIS_MNEMONIC_SETB:   MCID32_inst->immediate_value = 0b0010; break; // Below | Carry | Not above or equal
@@ -915,7 +914,7 @@ void Transassembler::post_conversion()
             MCID32_inst->immediate_value &= 0b11111; // Make sure to keep only the useful bits
         }
 
-        switch (IA32_inst->mnemonic) {
+        switch (IA32_inst.mnemonic) {
         case ZYDIS_MNEMONIC_SHLD:
             MCID32_inst->immediate_value |= 1 << 5; // Rotate left
             break;
@@ -930,7 +929,7 @@ void Transassembler::post_conversion()
 
     case 3 | (1 << 7) | (1 << 6): // Jcc
         // All opcodes are merged into one, and the condition is encoded in the immediate
-        switch (IA32_inst->mnemonic) {
+        switch (IA32_inst.mnemonic) {
         case ZYDIS_MNEMONIC_JNBE:  MCID32_inst->immediate_value = 0b00000; break; // Above | Not below or equal
         case ZYDIS_MNEMONIC_JNB:   MCID32_inst->immediate_value = 0b00001; break; // Above or equal | Not below | Not carry
         case ZYDIS_MNEMONIC_JB:    MCID32_inst->immediate_value = 0b00010; break; // Below | Carry | Not above or equal
@@ -959,6 +958,21 @@ void Transassembler::post_conversion()
 }
 
 
+void Transassembler::decode_instruction(ZyanUSize runtime_address, const uint8_t* encoded_data, size_t data_size)
+{
+    ZyanU8 prev_op_count = IA32_inst.operand_count;
+
+    if (!ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder, encoded_data, data_size, &IA32_inst, IA32_operands, USEFUL_OPERANDS_COUNT, 0))) {
+        throw ConversionException(runtime_address, "Instruction decoding error.");
+    }
+
+    // Invalidate the operands which have not been overridden by the decoding
+    for (ZyanU8 i = IA32_inst.operand_count; i < prev_op_count && i < USEFUL_OPERANDS_COUNT; i++) {
+        IA32_operands[i] = ZydisDecodedOperand();
+    }
+}
+
+
 /**
  * Extracts the data from the IA-32 instruction to create its equivalent in our instruction set.
  *
@@ -972,20 +986,19 @@ void Transassembler::post_conversion()
  * @param inst_virtual_address Current address of the beginning of the encoded instruction
  * @param segment_base_address Base address of the code segment
  */
-void Transassembler::convert_instruction(const ZydisDecodedInstruction& IA32inst, Instruction& inst,
-                                         uint32_t inst_virtual_address, uint32_t segment_base_address_)
+void Transassembler::convert_instruction(Instruction& inst, uint32_t inst_virtual_address, uint32_t segment_base_address_)
 {
-    if (!mapping->is_opcode_known(IA32inst.opcode)) {
-        throw ConversionException(inst_virtual_address, "Unknown opcode: %d (%s)\n", IA32inst.opcode, ZydisMnemonicGetString(IA32inst.mnemonic));
+    if (!mapping->is_opcode_known(IA32_inst.opcode)) {
+        throw ConversionException(inst_virtual_address, "Unknown opcode: %d (%s)\n", IA32_inst.opcode, ZydisMnemonicGetString(IA32_inst.mnemonic));
     }
 
     // TODO : REP prefix, checked with IA32inst.attributes & ZYDIS_ATTRIB_HAS_REP ou ZYDIS_ATTRIB_HAS_REPE
 
-    uint16_t opcode = IA32inst.opcode;
-    opcode |= IA32inst.opcode_map == ZYDIS_OPCODE_MAP_0F ? 0x0F00 : 0x0000;
-    if (mapping->has_opcode_reg_extension(IA32inst.opcode)) {
+    uint16_t opcode = IA32_inst.opcode;
+    opcode |= IA32_inst.opcode_map == ZYDIS_OPCODE_MAP_0F ? 0x0F00 : 0x0000;
+    if (mapping->has_opcode_reg_extension(IA32_inst.opcode)) {
         // /digit extension from the reg field of the Mod r/m byte
-        opcode += IA32inst.raw.modrm.reg << 12;
+        opcode += IA32_inst.raw.modrm.reg << 12;
     }
 
     const IA32::Inst& extract_data = mapping->get_extraction_data(opcode);
@@ -994,11 +1007,10 @@ void Transassembler::convert_instruction(const ZydisDecodedInstruction& IA32inst
 
     // Size overrides
     if (extract_data.keep_overrides) {
-        inst.operand_size_override = IA32inst.operand_width == 16; // 16-bits override
-        inst.operand_byte_size_override = IA32inst.operand_width == 8; // 8-bits override
+        inst.operand_size_override = IA32_inst.operand_width == 16; // 16-bits override
+        inst.operand_byte_size_override = IA32_inst.operand_width == 8; // 8-bits override
     }
 
-    IA32_inst = &IA32inst;
     MCID32_inst = &inst;
     this->virtual_address = inst_virtual_address;
     this->segment_base_address = segment_base_address_;
@@ -1008,11 +1020,11 @@ void Transassembler::convert_instruction(const ZydisDecodedInstruction& IA32inst
     register_index = 0;
     sib_scale = 0;
 
-    if (IA32inst.address_width != 32) {
-        throw ConversionException(inst_virtual_address, "Address sizes different from 32 bits are not supported. Given size: %d bits", IA32inst.address_width);
+    if (IA32_inst.address_width != 32) {
+        throw ConversionException(inst_virtual_address, "Address sizes different from 32 bits are not supported. Given size: %d bits", IA32_inst.address_width);
     }
-    if (IA32inst.stack_width != 32) {
-        throw ConversionException(inst_virtual_address, "Stack sizes different from 32 bits are not supported. Given size: %d bits", IA32inst.stack_width);
+    if (IA32_inst.stack_width != 32) {
+        throw ConversionException(inst_virtual_address, "Stack sizes different from 32 bits are not supported. Given size: %d bits", IA32_inst.stack_width);
     }
 
     // Mod r/m and SIB bytes
@@ -1022,7 +1034,7 @@ void Transassembler::convert_instruction(const ZydisDecodedInstruction& IA32inst
         extract_mod_rm_sib_bytes();
     }
 
-    if (extract_data.has_mod_byte != bool(IA32inst.attributes & ZYDIS_ATTRIB_HAS_MODRM)) {
+    if (extract_data.has_mod_byte != bool(IA32_inst.attributes & ZYDIS_ATTRIB_HAS_MODRM)) {
         throw ConversionException(inst_virtual_address, "Invalid implementation, extraction info is different from the one of the decompiler.");
     }
 
@@ -1038,11 +1050,11 @@ void Transassembler::convert_instruction(const ZydisDecodedInstruction& IA32inst
             throw ConversionException(inst_virtual_address, "Immediate value already used: %d", inst.immediate_value);
         }
 
-        if (IA32inst.operands[2].type != ZydisOperandType::ZYDIS_OPERAND_TYPE_IMMEDIATE) {
+        if (IA32_operands[2].type != ZydisOperandType::ZYDIS_OPERAND_TYPE_IMMEDIATE) {
             throw ConversionException(inst_virtual_address, "Wrong third immediate operand type.");
         }
 
-        inst.immediate_value = operand_to_immediate(extract_data.operand_3_imm, IA32inst.operands[2]);
+        inst.immediate_value = operand_to_immediate(extract_data.operand_3_imm, IA32_operands[2]);
     }
 
     inst.op1.read = extract_data.read_operand_1;

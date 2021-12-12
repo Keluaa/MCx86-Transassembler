@@ -1,13 +1,11 @@
 ﻿
 #include <iostream>
 
-#include <Zydis/Zydis.h>
 #include <elfio/elfio.hpp>
 
 #include "transassembler/Transassembler.h"
 
 
-static ZydisFormatter formatter;
 static IA32::Mapping mapping;
 static ComputerOpcodesInfo opcodes_info;
 
@@ -240,8 +238,6 @@ int main()
     if (load_mapping(mapping_file_name)) {
         return 1;
     }
-
-    ZydisFormatterInit(&formatter, ZYDIS_FORMATTER_STYLE_INTEL);
 
     if (transassemble_elf(elf_file, out_folder)) {
         return 1;

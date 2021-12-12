@@ -35,18 +35,29 @@ public:
     void process_jumping_instructions();
     void update_labels_section(const ELFIO::endianess_convertor& conv, uint8_t* data, size_t labels_size);
 
-    void convert_instruction(const ZydisDecodedInstruction& IA32inst, Instruction& inst,
-                             uint32_t inst_virtual_address, uint32_t segment_base_address);
+    void decode_instruction(ZyanUSize runtime_address, const uint8_t* encoded_data, size_t data_size);
+    void convert_instruction(Instruction& inst, uint32_t inst_virtual_address, uint32_t segment_base_address);
 
     void convert_instructions(std::filebuf& out_file);
 
-    void print_disassembly(const ZydisFormatter& formatter) const;
+    void print_disassembly();
 
     uint32_t get_instructions_count() const { return instructions_numbers.size(); }
 
 private:
+    /**
+     * Number of operands to decode.
+     *
+     * We only need 3: the first two are the main operands of most instructions, the third is the occasional additional
+     * immediate operand.
+     */
+    static const uint8_t USEFUL_OPERANDS_COUNT = 3;
+
+    // Results of 'decode_instruction'
+    ZydisDecodedInstruction IA32_inst{};
+    ZydisDecodedOperand IA32_operands[USEFUL_OPERANDS_COUNT]{};
+
     // Fields used by 'convert_instruction' while converting an instruction
-    const ZydisDecodedInstruction* IA32_inst = nullptr;
     Instruction* MCID32_inst = nullptr;
     uint32_t segment_base_address = 0;
     ZyanUSize virtual_address = 0;

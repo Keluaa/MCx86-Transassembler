@@ -7,7 +7,6 @@
 #include "doctest.h"
 
 
-static ZydisDecoder decoder;
 static ComputerOpcodesInfo opcodes_info;
 static IA32::Mapping mapping;
 static Transassembler* transassembler;
@@ -43,9 +42,6 @@ void init()
         FAIL("Error while loading the mapping file.");
     }
     mapping_file_stream.close();
-
-    // x86 with 32-bit addressing
-    ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LEGACY_32, ZYDIS_STACK_WIDTH_32);
 
     INFO("Mappings loaded.");
 
@@ -92,12 +88,10 @@ void find_instructions_differences(const Instruction& generated, const Instructi
 
 void test_instruction_conversion(const uint8_t* encoded_IA32_inst, size_t encoded_size, const Instruction& expected_result)
 {
-    ZydisDecodedInstruction IA32_inst;
-    REQUIRE(ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, encoded_IA32_inst, encoded_size, &IA32_inst)));
-
     Instruction inst{};
 
-    REQUIRE_NOTHROW(transassembler->convert_instruction(IA32_inst, inst, 0x80000, 0x80000));
+    REQUIRE_NOTHROW(transassembler->decode_instruction(0x80000, encoded_IA32_inst, encoded_size));
+    REQUIRE_NOTHROW(transassembler->convert_instruction(inst, 0x80000, 0x80000));
 
     if (inst != expected_result) {
         find_instructions_differences(inst, expected_result);
