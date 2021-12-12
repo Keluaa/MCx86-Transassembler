@@ -85,8 +85,7 @@ SECTIONS
     data_size = SIZEOF(.data) + SIZEOF(.bss);
 
     /DISCARD/ : {           /* Discarded sections */
-        *(.note.gnu.build-id) /* Discarding this section produces a warning, but we don't care */
+        *(.note.gnu.build-id)
         *(.comment)
     }
 }
-'

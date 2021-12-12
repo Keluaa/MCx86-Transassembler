@@ -44,8 +44,8 @@ BTS,0FAB,,,BTS,1,r/m,r,,1,1,1,,,,,,
 BTS,0FBA,5,,BTS,1,r/m,imm8,,1,1,1,,,,,,
 CALL,E8,,,CALL,1,rel,,,1,,,,,,,,
 CALL,FF,2,,CALL,1,r/m,,,1,,,,,,,,
-CALL,FF,3,,CALL,1,m16:32,,,1,,,,,,,,
-CALL,9A,,,CALL,1,ptr16:32,,,1,,,,,,,,
+CALL,FF,3,,CALL,1,m16:32,,,1,,,,,,,,1
+CALL,9A,,,CALL,1,ptr16:32,,,1,,,,,,,,1
 CBW,98,,,CBW,1,A,,,1,,1,,,,,,
 CLC,F8,,,CLC,,,,,,,,,,,,,
 CLD,FC,,,CLD,,,,,,,,,,,,,

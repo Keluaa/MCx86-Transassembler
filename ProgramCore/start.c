@@ -16,16 +16,6 @@ void _start() // NOLINT(bugprone-reserved-identifier)
 {
     int ret = main();
 
-    /*
-    asm volatile(
-        "movl $1, %%eax\n\t" // Interrupt 1 is the exit function
-        "movl %0, %%ebx\n\t" // return value, passed as a parameter
-        "int  $0x80\n\t"     // syscall for x86
-        "hlt"                // protection to make sure any data after is not executed
-        :
-        : "m" (ret));
-    */
-
     __asm__ volatile(
         "mov eax, 1\n\t"  // Interrupt 1 is the exit function
         "mov ebx, %0\n\t" // return value, passed as a parameter

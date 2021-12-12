@@ -1010,7 +1010,7 @@ void Transassembler::convert_instruction(Instruction& inst, uint32_t inst_virtua
 
     if (extract_data.disabled) {
         // TODO : disable more instructions
-        throw ConversionException(inst_virtual_address, "Disabled opcode: 0x%x", opcode);
+        throw ConversionException(inst_virtual_address, "'%s', disabled opcode: 0x%x", extract_data.mnemonic, opcode);
     }
 
     inst.opcode = extract_data.equiv_opcode;
