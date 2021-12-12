@@ -524,13 +524,13 @@ void Transassembler::convert_operand(const IA32::Inst& extract_data, uint8_t op_
     case Operand::reg8:
         op.type = OpType::REG;
         // The register index is encoded in the first 3 bits of the opcode
-        op.reg = scale_register(MCID32_inst->opcode & 0b111, false, true);
+        op.reg = scale_register(IA32_inst.opcode & 0b111, false, true);
         break;
 
     case Operand::reg:
         op.type = OpType::REG;
         // The register index is encoded in the first 3 bits of the opcode
-        op.reg = scale_register(MCID32_inst->opcode & 0b111, operand_size_override, operand_byte_size_override);
+        op.reg = scale_register(IA32_inst.opcode & 0b111, operand_size_override, operand_byte_size_override);
         break;
 
     case Operand::r8:
