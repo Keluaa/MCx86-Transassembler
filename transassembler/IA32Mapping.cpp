@@ -217,6 +217,8 @@ static IA32::Operand operand_descriptor_from_str(const char* desc)
     case chars_to_int("DX"):
     case chars_to_int("EDX"):      return IA32::Operand::EDX;   // DX or EDX depending on the operand size
 
+    case chars_to_int("ESP"):      return IA32::Operand::ESP;
+
     // Scaled register operands
     case chars_to_int("A"):        return IA32::Operand::A;     // AL, AX or EAX depending on the operand size
     case chars_to_int("C"):        return IA32::Operand::C;     // CL, CX or ECX depending on the operand size
@@ -387,6 +389,7 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
     bool tmp_keep_overrides;
     bool tmp_read_op1, tmp_read_op2, tmp_write_r1_op1, tmp_write_r2_op2;
     bool tmp_write_r2_reg, tmp_ret_reg_scale;
+    bool tmp_disabled;
 
     const std::array format_values{
         std::make_any<uint32_t*>(&tmp_opcode),
@@ -405,6 +408,7 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
         std::make_any<bool*>(&tmp_ret_reg_scale),
         std::make_any<std::string*>(&tmp_ret_reg),
         std::make_any<uint32_t*>(&tmp_imm_val),
+        std::make_any<bool*>(&tmp_disabled),
     };
 
     int line_nb = 0;
@@ -431,13 +435,14 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
         tmp_write_r2_op2 = false;
         tmp_write_r2_reg = false;
         tmp_ret_reg_scale = false;
+        tmp_disabled = false;
         tmp_operand_1.clear();
         tmp_operand_2.clear();
         tmp_opt_imm_3.clear();
         tmp_ret_reg.clear();
 
         // Scan the line
-        const char format[] = "%x,%d,%b,%s,%b,%s,%s,%s,%b,%b,%b,%b,%b,%b,%s,%o\r";
+        const char format[] = "%x,%d,%b,%s,%b,%s,%s,%s,%b,%b,%b,%b,%b,%b,%s,%o,%b\r";
         try {
             scan_optional_format(line, format, format_values);
         }
@@ -468,6 +473,7 @@ bool IA32::Mapping::load_instructions_extract_info(std::fstream& mapping_file, c
         inst.write_ret_2_register = tmp_write_r2_reg;
         inst.write_ret_register_scale = tmp_ret_reg_scale;
         inst.write_ret_out_register = explicit_register_from_name(tmp_ret_reg.c_str());
+        inst.disabled = tmp_disabled;
         inst.immediate_value = (uint8_t) tmp_imm_val;
 
         inst.has_mod_byte = is_mod_rm_byte_present(extension != 0, repeat_for_all_registers, inst.operand_1, inst.operand_2);

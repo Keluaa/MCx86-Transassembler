@@ -56,17 +56,21 @@ enum class Register : uint8_t {
 /**
  * Instruction for our computer.
  *
- * It is not encoded, which simplifies the circuitry by a lot, however this comes at the cost of bigger
- * memory usage, but by design this is not a problem. The only downside is that the executable files are
- * bigger.
+ * It is not encoded, which simplifies the circuitry by a lot, however this comes at the cost of bigger memory usage,
+ * but by design this is not a problem. The only downside is that the executable files are bigger.
  *
  * Total size: 107 bits used.
  */
-struct Instruction {
-
+struct Instruction
+{
     uint8_t opcode;
 
-    // Struct describing an operand, present in order for IA32::Mapping::convert_operand to exist.
+    /**
+     * Struct describing an operand.
+     *
+     * If the operand is a memory operand, the 'reg' field can hold more info: the first 3 bits are the base register
+     * index and the 2 last bits are the scale of the scaled register.
+     */
     struct Operand {
         OpType type : 2;
         Register reg : 5;

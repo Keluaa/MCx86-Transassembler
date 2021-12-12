@@ -41,6 +41,8 @@ enum class IA32::Operand : uint8_t
     DL,
     EDX,
 
+    ESP,
+
     /// Scaled register operands, they only specify an index, the size will be determined by the operand size
     A,   /// AL, AX, EAX
     C,   /// CL, CX, ECX
@@ -152,9 +154,11 @@ struct IA32::Inst
     bool get_flags : 1;                   /// The instruction needs the CPU flags (to either read and/or write)
     bool get_CR0 : 1;                     /// The instruction needs the CR0 flags (only read)
 
+    bool disabled : 1;                    /// If the instruction cannot be converted
+
     uint8_t : 0; // alignment
 
-    uint8_t immediate_value;             /// Constant immediate value for the instruction
+    uint8_t immediate_value;              /// Constant immediate value for the instruction
 };
 
 

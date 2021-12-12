@@ -416,6 +416,8 @@ Register Transassembler::operand_to_register(IA32::Operand register_operand) con
     case Operand::DL:  return Register::DL;
     case Operand::EDX: return Register::EDX;
 
+    case Operand::ESP: return Register::ESP;
+
     case Operand::A: return scale_register(0);
     case Operand::C: return scale_register(1);
     case Operand::D: return scale_register(2);
@@ -473,6 +475,8 @@ void Transassembler::convert_operand(const IA32::Inst& extract_data, uint8_t op_
 
     case Operand::DL:  op.type = OpType::REG; op.reg = Register::DL;  break;
     case Operand::EDX: op.type = OpType::REG; op.reg = Register::EDX; break;
+
+    case Operand::ESP: op.type = OpType::REG; op.reg = Register::ESP; break;
 
     case Operand::A:
         op.type = OpType::REG;
@@ -775,10 +779,11 @@ void Transassembler::extract_mod_rm_sib_bytes()
 
         if (modrm.rm == 0b100) {
             // There is a SIB byte
-            MCID32_inst->scaled_reg_present = true;
-            MCID32_inst->scaled_reg = sib.index;
-            sib_scale = sib.scale;
-
+            if (sib.index != 0b100) {
+                MCID32_inst->scaled_reg_present = true;
+                MCID32_inst->scaled_reg = sib.index;
+                sib_scale = sib.scale;
+            }
             if (sib.base == 0b101) {
                 switch (modrm.mod) {
                 case 0b00:
@@ -1002,6 +1007,11 @@ void Transassembler::convert_instruction(Instruction& inst, uint32_t inst_virtua
     }
 
     const IA32::Inst& extract_data = mapping->get_extraction_data(opcode);
+
+    if (extract_data.disabled) {
+        // TODO : disable more instructions
+        throw ConversionException(inst_virtual_address, "Disabled opcode: 0x%x", opcode);
+    }
 
     inst.opcode = extract_data.equiv_opcode;
 

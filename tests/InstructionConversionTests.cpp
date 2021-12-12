@@ -267,12 +267,10 @@ static const std::array<TestInfo, 11> instructions_test_cases{
         "LEA", { /* LEA ECX, [ESP+0x4] */ 0x8D, 0x4C, 0x24, 0x04 }, {
             .opcode = 31,
             .op1 = { .type = OpType::REG, .reg = Register::ECX, .read = false },
-            .op2 = { .type = OpType::MEM, .reg = Register::ESP, .read = true },
+            .op2 = { .type = OpType::MEM, .reg = Register::ESP, .read = false }, // This is important that we don't read the operand, as the address of a LEA might not be a valid address
             .write_ret1_to_op1 = true,
             .compute_address = true,
             .base_reg_present = true,
-            .scaled_reg_present = true,
-            .scaled_reg = uint8_t(Register::ESP),
             .address_value = 0x4,
         }
     },
