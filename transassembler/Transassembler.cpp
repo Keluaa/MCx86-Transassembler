@@ -868,7 +868,9 @@ void Transassembler::post_conversion()
         case ZYDIS_MNEMONIC_ROR: MCID32_inst->immediate_value |= 0 << 6; // Rotate right
             break;
 
-        default: break; // This case will never happen just trust me
+        default:
+            throw ConversionException(virtual_address, "Unknown mnemonic for 'ROT': %s",
+                                      ZydisMnemonicGetString(IA32_inst.mnemonic));
         }
         break;
 
@@ -887,30 +889,35 @@ void Transassembler::post_conversion()
         case ZYDIS_MNEMONIC_SHR:  MCID32_inst->immediate_value |= 0 << 6; // Rotate right
             break;
 
-        default: break; // This case will never happen just trust me
+        default:
+            throw ConversionException(virtual_address, "Unknown mnemonic for 'SHFT': %s",
+                                      ZydisMnemonicGetString(IA32_inst.mnemonic));
         }
         break;
 
     case 44: // SETcc
-        // All opcodes are merged into one, and the condition is encoded in the immediate
+        // All opcodes are merged into one, and the condition is encoded in the immediate.
+        // See Appendix B of Volume 1 of the Intel 64 and IA-32 Architectures SDM for more info
         switch (IA32_inst.mnemonic) {
-        case ZYDIS_MNEMONIC_SETNBE: MCID32_inst->immediate_value = 0b0000; break; // Above | Not below or equal
-        case ZYDIS_MNEMONIC_SETNB:  MCID32_inst->immediate_value = 0b0001; break; // Above or equal | Not below | Not carry
+        case ZYDIS_MNEMONIC_SETO:   MCID32_inst->immediate_value = 0b0000; break; // Overflow
+        case ZYDIS_MNEMONIC_SETNO:  MCID32_inst->immediate_value = 0b0001; break; // Not overflow
         case ZYDIS_MNEMONIC_SETB:   MCID32_inst->immediate_value = 0b0010; break; // Below | Carry | Not above or equal
-        case ZYDIS_MNEMONIC_SETBE:  MCID32_inst->immediate_value = 0b0011; break; // Below or equal | Not above
+        case ZYDIS_MNEMONIC_SETNB:  MCID32_inst->immediate_value = 0b0011; break; // Above or equal | Not below | Not carry
         case ZYDIS_MNEMONIC_SETZ:   MCID32_inst->immediate_value = 0b0100; break; // Equal | Zero
-        case ZYDIS_MNEMONIC_SETNLE: MCID32_inst->immediate_value = 0b0101; break; // Greater | Not less or equal
-        case ZYDIS_MNEMONIC_SETNL:  MCID32_inst->immediate_value = 0b0110; break; // Greater or Equal | Not less
-        case ZYDIS_MNEMONIC_SETL:   MCID32_inst->immediate_value = 0b0111; break; // Less | Not greater or equal
-        case ZYDIS_MNEMONIC_SETLE:  MCID32_inst->immediate_value = 0b1000; break; // Less or equal | Not greater
-        case ZYDIS_MNEMONIC_SETNZ:  MCID32_inst->immediate_value = 0b1001; break; // Not equal | Not zero
-        case ZYDIS_MNEMONIC_SETNO:  MCID32_inst->immediate_value = 0b1010; break; // Not overflow
+        case ZYDIS_MNEMONIC_SETNZ:  MCID32_inst->immediate_value = 0b0101; break; // Not equal | Not zero
+        case ZYDIS_MNEMONIC_SETBE:  MCID32_inst->immediate_value = 0b0110; break; // Below or equal | Not above
+        case ZYDIS_MNEMONIC_SETNBE: MCID32_inst->immediate_value = 0b0111; break; // Above | Not below or equal
+        case ZYDIS_MNEMONIC_SETS:   MCID32_inst->immediate_value = 0b1000; break; // Sign
+        case ZYDIS_MNEMONIC_SETNS:  MCID32_inst->immediate_value = 0b1001; break; // Not sign
+        case ZYDIS_MNEMONIC_SETP:   MCID32_inst->immediate_value = 0b1010; break; // Parity | Parity even
         case ZYDIS_MNEMONIC_SETNP:  MCID32_inst->immediate_value = 0b1011; break; // Not parity | Parity odd
-        case ZYDIS_MNEMONIC_SETNS:  MCID32_inst->immediate_value = 0b1100; break; // Not sign
-        case ZYDIS_MNEMONIC_SETO:   MCID32_inst->immediate_value = 0b1101; break; // Overflow
-        case ZYDIS_MNEMONIC_SETP:   MCID32_inst->immediate_value = 0b1110; break; // Parity | Parity even
-        case ZYDIS_MNEMONIC_SETS:   MCID32_inst->immediate_value = 0b1111; break; // Sign
-        default: break; // This case will never happen just trust me
+        case ZYDIS_MNEMONIC_SETL:   MCID32_inst->immediate_value = 0b1100; break; // Less | Not greater or equal
+        case ZYDIS_MNEMONIC_SETNL:  MCID32_inst->immediate_value = 0b1101; break; // Greater or Equal | Not less
+        case ZYDIS_MNEMONIC_SETLE:  MCID32_inst->immediate_value = 0b1110; break; // Less or equal | Not greater
+        case ZYDIS_MNEMONIC_SETNLE: MCID32_inst->immediate_value = 0b1111; break; // Greater | Not less or equal
+        default:
+            throw ConversionException(virtual_address, "Unknown mnemonic for 'SETcc': %s",
+                                      ZydisMnemonicGetString(IA32_inst.mnemonic));
         }
         break;
 
@@ -928,32 +935,37 @@ void Transassembler::post_conversion()
             MCID32_inst->immediate_value |= 0 << 5; // Rotate right
             break;
 
-        default: break; // This case will never happen just trust me
+        default:
+            throw ConversionException(virtual_address, "Unknown mnemonic for 'SHD': %s",
+                                      ZydisMnemonicGetString(IA32_inst.mnemonic));
         }
         break;
 
     case 3 | (1 << 7) | (1 << 6): // Jcc
-        // All opcodes are merged into one, and the condition is encoded in the immediate
+        // All opcodes are merged into one, and the condition is encoded in the immediate.
+        // See Appendix B of Volume 1 of the Intel 64 and IA-32 Architectures SDM for more info
         switch (IA32_inst.mnemonic) {
-        case ZYDIS_MNEMONIC_JNBE:  MCID32_inst->immediate_value = 0b00000; break; // Above | Not below or equal
-        case ZYDIS_MNEMONIC_JNB:   MCID32_inst->immediate_value = 0b00001; break; // Above or equal | Not below | Not carry
+        case ZYDIS_MNEMONIC_JO:    MCID32_inst->immediate_value = 0b00000; break; // Overflow
+        case ZYDIS_MNEMONIC_JNO:   MCID32_inst->immediate_value = 0b00001; break; // Not overflow
         case ZYDIS_MNEMONIC_JB:    MCID32_inst->immediate_value = 0b00010; break; // Below | Carry | Not above or equal
-        case ZYDIS_MNEMONIC_JBE:   MCID32_inst->immediate_value = 0b00011; break; // Below or equal | Not above
+        case ZYDIS_MNEMONIC_JNB:   MCID32_inst->immediate_value = 0b00011; break; // Above or equal | Not below | Not carry
         case ZYDIS_MNEMONIC_JZ:    MCID32_inst->immediate_value = 0b00100; break; // Equal | Zero
-        case ZYDIS_MNEMONIC_JNLE:  MCID32_inst->immediate_value = 0b00101; break; // Greater | Not less or equal
-        case ZYDIS_MNEMONIC_JNL:   MCID32_inst->immediate_value = 0b00110; break; // Greater or Equal | Not less
-        case ZYDIS_MNEMONIC_JL:    MCID32_inst->immediate_value = 0b00111; break; // Less | Not greater or equal
-        case ZYDIS_MNEMONIC_JLE:   MCID32_inst->immediate_value = 0b01000; break; // Less or equal | Not greater
-        case ZYDIS_MNEMONIC_JNZ:   MCID32_inst->immediate_value = 0b01001; break; // Not equal | Not zero
-        case ZYDIS_MNEMONIC_JNO:   MCID32_inst->immediate_value = 0b01010; break; // Not overflow
+        case ZYDIS_MNEMONIC_JNZ:   MCID32_inst->immediate_value = 0b00101; break; // Not equal | Not zero
+        case ZYDIS_MNEMONIC_JBE:   MCID32_inst->immediate_value = 0b00110; break; // Below or equal | Not above
+        case ZYDIS_MNEMONIC_JNBE:  MCID32_inst->immediate_value = 0b00111; break; // Above | Not below or equal
+        case ZYDIS_MNEMONIC_JS:    MCID32_inst->immediate_value = 0b01000; break; // Sign
+        case ZYDIS_MNEMONIC_JNS:   MCID32_inst->immediate_value = 0b01001; break; // Not sign
+        case ZYDIS_MNEMONIC_JP:    MCID32_inst->immediate_value = 0b01010; break; // Parity | Parity even
         case ZYDIS_MNEMONIC_JNP:   MCID32_inst->immediate_value = 0b01011; break; // Not parity | Parity odd
-        case ZYDIS_MNEMONIC_JNS:   MCID32_inst->immediate_value = 0b01100; break; // Not sign
-        case ZYDIS_MNEMONIC_JO:    MCID32_inst->immediate_value = 0b01101; break; // Overflow
-        case ZYDIS_MNEMONIC_JP:    MCID32_inst->immediate_value = 0b01110; break; // Parity | Parity even
-        case ZYDIS_MNEMONIC_JS:    MCID32_inst->immediate_value = 0b01111; break; // Sign
+        case ZYDIS_MNEMONIC_JL:    MCID32_inst->immediate_value = 0b01100; break; // Less | Not greater or equal
+        case ZYDIS_MNEMONIC_JNL:   MCID32_inst->immediate_value = 0b01101; break; // Greater or Equal | Not less
+        case ZYDIS_MNEMONIC_JLE:   MCID32_inst->immediate_value = 0b01110; break; // Less or equal | Not greater
+        case ZYDIS_MNEMONIC_JNLE:  MCID32_inst->immediate_value = 0b01111; break; // Greater | Not less or equal
         case ZYDIS_MNEMONIC_JCXZ:  MCID32_inst->immediate_value = 0b10000; break; // CX register is zero
         case ZYDIS_MNEMONIC_JECXZ: MCID32_inst->immediate_value = 0b10001; break; // ECX register is zero
-        default: break; // This case will never happen just trust me
+        default:
+            throw ConversionException(virtual_address, "Unknown mnemonic for 'Jcc': %s",
+                                      ZydisMnemonicGetString(IA32_inst.mnemonic));
         }
         break;
 
