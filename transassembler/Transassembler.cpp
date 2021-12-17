@@ -54,12 +54,12 @@ void Transassembler::process_jumping_instructions()
         if (unprocessed_jump_targets.contains(runtime_address)) {
             auto unprocessed_jumps = unprocessed_jump_targets.equal_range(runtime_address);
             for (auto it = unprocessed_jumps.first; it != unprocessed_jumps.second; it++) {
-                processed_jumping_instructions[it->second] = current_inst;
+                processed_jumping_instructions[it->second] = segment_address + current_inst;
             }
             unprocessed_jump_targets.erase(unprocessed_jumps.first, unprocessed_jumps.second);
         }
 
-        instructions_numbers[runtime_address] = current_inst;
+        instructions_numbers[runtime_address] = current_inst + segment_address;
 
         offset += IA32_inst.length;
         runtime_address += IA32_inst.length;
@@ -327,7 +327,7 @@ void Transassembler::convert_instructions(std::filebuf& out_file)
 
         if (processed_jumping_instructions.contains(current_inst)) {
             // TODO : make sure this covers all cases
-            inst.address_value = segment_address + processed_jumping_instructions[current_inst];
+            inst.address_value = processed_jumping_instructions[current_inst];
         }
 
         offset += IA32_inst.length;

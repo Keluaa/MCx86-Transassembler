@@ -16,6 +16,7 @@ PHDRS
 {
     seg_text    PT_LOAD;
     seg_other   PT_LOAD;
+    seg_rodata  PT_LOAD;
     seg_data    PT_LOAD;
 }
 
@@ -30,7 +31,7 @@ MEMORY
 {
     TEXT (rx) : ORIGIN = 0x010000, LENGTH = 32k
     ROM  (r)  : ORIGIN = 0x200000, LENGTH = 1M
-    RAM  (aw) : ORIGIN = 0x400000, LENGTH = 1M
+    RAM  (aw) : ORIGIN = 0x300000, LENGTH = 1M
 }
 
 
@@ -39,8 +40,9 @@ MEMORY
     
     The following symbols are defined:
      - rodata_start: address of the start of the read-only data section
-     - rodata_end: address of the end of the read-only data section
-     - data_start: address of the start of the data section
+     - rodata_end:   address of the end of the read-only data section
+     - labels_pos:   address of the start of the labels section in the read-only data section
+     - data_start:   address of the start of the data section
      - data_end (not exported): address of the end of the data section
      - data_size: size of the data and bss sections
  */
@@ -58,28 +60,25 @@ SECTIONS
     } > TEXT
       :seg_other
 
-    .labels : {
-        rodata_start = .;
-        *(.labels)          /* Custom sections containing labels to instructions */
-    } > ROM                 /* In the ROM memory block */
-      :seg_data
-
     .rodata : {
+        rodata_start = .;
         *(.rodata)          /* Read only data sections */
+        labels_pos = .;
+        *(.labels)          /* Custom sections containing labels to instructions. Placed in .rodata, else weird things happen */
         rodata_end = .;
-    } > ROM                 /* In the ROM memory block */
-      :seg_data
+    } > ROM
+      :seg_rodata
 
-    .data : {
+    .data : AT(rodata_end) {
         data_start = .;
         *(.data)            /* Data sections */
         HIDDEN(data_end = .);
-    } > RAM                 /* In the RAM memory block */
+    } > RAM
       :seg_data
 
     .bss : AT(data_end) {   /* Place after the .data section */
         *(.bss)             /* Uninitialized data sections */
-    } > RAM                 /* In the RAM memory block */
+    } > RAM
       :seg_data
 
     data_size = SIZEOF(.data) + SIZEOF(.bss);
