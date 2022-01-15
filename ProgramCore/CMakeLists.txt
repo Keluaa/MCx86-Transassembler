@@ -6,6 +6,7 @@ set(Program_Core_Sources
 set(Program_Core_Linker_Script linking.ld)
 
 set(Program_Core_Executable Program_core.exe)
+set(Program_Core_Debug_Executable Program_core_debug.exe)
 
 set(Program_Core_Compile_Flags)
 
@@ -66,13 +67,19 @@ set(Program_Core_Link_CMD
         ${Program_Core_Compile_Flags}
         ${Program_Core_Link_Flags}
         -T ${Program_Core_Linker_Script} # Build the output file using our custom linker script
-        -o ${Program_Core_Executable}
         ${Program_Core_Assembly_files})
+
+set(Program_Core_Rename_CMD
+		${Program_Core_Env} mv ./a.out ${Program_Core_Executable})
+
+set(Program_Core_Debug_Rename_CMD
+		${Program_Core_Env} mv ./a.out ${Program_Core_Debug_Executable})
 
 add_custom_target(Program_core
         COMMAND ${Program_Core_Compile_CMD}         # Compile the sources into assembly files
         COMMAND ${Program_Core_Preprocess_CMD}      # Preprocess the assembly files
         COMMAND ${Program_Core_Link_CMD}            # Link the assembly files into an executable
+		COMMAND ${Program_Core_Rename_CMD}			# Rename the executable
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ProgramCore
         SOURCES ${Program_Core_Sources} 			# Only useful for the IDE
         COMMENT "Creating the core executable..."
@@ -85,9 +92,10 @@ add_dependencies(Program_core Assembly_Preprocessor)
 add_custom_target(Program_core_debug
 		COMMAND ${Program_Core_Compile_CMD} -g      # Compile the sources into assembly files, with debugging info
 		COMMAND ${Program_Core_Link_CMD}            # Link the assembly files into an executable
+		COMMAND ${Program_Core_Debug_Rename_CMD}	# Rename the executable
 		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ProgramCore
 		SOURCES ${Program_Core_Sources} 			# Only useful for the IDE
 		COMMENT "Creating the core executable..."
-		BYPRODUCTS ${Program_Core_Executable} ${Program_Core_Assembly_files}
+		BYPRODUCTS ${Program_Core_Debug_Executable} ${Program_Core_Assembly_files}
 		VERBATIM
 		USES_TERMINAL)
