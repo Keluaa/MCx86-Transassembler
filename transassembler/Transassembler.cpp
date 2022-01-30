@@ -1097,3 +1097,13 @@ void Transassembler::convert_instruction(Instruction& inst, uint32_t inst_virtua
 
     post_conversion();
 }
+
+
+void Transassembler::write_instruction_map(std::ofstream& out_file)
+{
+    out_file << std::hex;
+    for (auto& [ address, index ] : instructions_numbers) {
+        out_file << address << ", " << index << "\n";
+    }
+    out_file << std::dec;
+}

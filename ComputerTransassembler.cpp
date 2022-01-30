@@ -176,6 +176,7 @@ bool transassemble_elf(const std::string& elf_file, const std::string& out_folde
     const std::string instructions_file_name = out_folder + "/instructions.bin";
     const std::string memory_map_file_name = out_folder + "/memory_map.txt";
     const std::string memory_data_file_name = out_folder + "/memory_data.bin";
+    const std::string instructions_map_file_name = out_folder + "/instructions_map.txt";
 
     ELFIO::elfio elf_reader;
 
@@ -255,6 +256,15 @@ bool transassemble_elf(const std::string& elf_file, const std::string& out_folde
 
     write_memory_map(memory_map_file_name, elf_reader.get_entry(), transassembler.get_instructions_count(), raw_rom_size + labels_size, raw_ram_size);
     write_memory_contents(memory_data_file_name, elf_reader);
+
+    std::ofstream instructions_map_file(instructions_map_file_name);
+    if (!instructions_map_file) {
+        std::cout << "Could not open the instructions map file.\n";
+        return true;
+    }
+    transassembler.write_instruction_map(instructions_map_file);
+
+    std::cout << "Successfully wrote to the output files." << std::endl;
 
     return false;
 }

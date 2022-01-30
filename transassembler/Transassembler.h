@@ -39,6 +39,7 @@ public:
     void convert_instruction(Instruction& inst, uint32_t inst_virtual_address, uint32_t segment_base_address);
 
     void convert_instructions(std::filebuf& out_file);
+    void write_instruction_map(std::ofstream& out_file);
 
     void print_disassembly();
 
@@ -100,7 +101,7 @@ private:
     /**
      * Maps the address of all instructions to their index.
      */
-    std::map<ZyanUSize, uint32_t> instructions_numbers; // TODO : maybe remove this by adding the labels as unprocessed jump targets in convert_instructions()
+    std::map<ZyanUSize, uint32_t> instructions_numbers;
 };
 
 
